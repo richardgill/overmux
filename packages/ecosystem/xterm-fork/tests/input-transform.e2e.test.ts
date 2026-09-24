@@ -256,6 +256,10 @@ const scenarios = [
   {
     name: "keydown and keypress transform once; native Ctrl/Alt remain encoded",
     run: async () => {
+      await page.evaluate(() => {
+        // This case tests terminal Alt encoding, not macOS Option text entry.
+        window.terminal.options.macOptionIsMeta = true;
+      });
       await page.keyboard.press("c");
       await page.evaluate(() => {
         window.pending = "ctrl";
