@@ -50,11 +50,15 @@ Zellij's JSON names and model remain visible. Pane identity is the pair `is_plug
 
 The operation handlers expose only public 0.45.1 actions with explicit stable targets:
 
-- `createTab`, `renameTab`, and `closeTab`
+- `createTab`, `moveTab`, `renameTab`, and `closeTab`
 - `createPane` and `closePane`
 - `renameSession` and `killSession`
 
-Creation uses `--no-focus` and returns the tab or pane identity printed by Zellij. Focus, selection, movement, mode, and session-switch actions are intentionally absent because they act relative to a transient action client rather than a named attached client.
+Creation uses `--no-focus` and returns the tab or pane identity printed by Zellij. `createTab({ sessionName, fromPane: { id: 3, isPlugin: false }, name?, command? })` uses that terminal pane's reported `pane_cwd` from a one-off, session-scoped `list-panes --all --json` query. Plugin snapshots do not include working directories; this metadata query does not publish topology. Alternatively, pass an explicit `cwd`; `cwd` and `fromPane` are mutually exclusive. A missing session or source pane returns `not-found`; an unavailable working directory returns an error without falling back to the server's directory.
+
+`moveTab({ sessionName, tabId, direction: "left" | "right" })` targets a stable tab ID, not the action client's focused tab. Missing sessions or tabs return `not-found`. It preserves Zellij 0.45.1's native ordering: adjacent tabs swap, moving the first tab left rotates it to the end, and moving the last tab right rotates it to the start. A single-tab move succeeds without waiting for a topology change. Other moves wait for the expected ordering in a newer plugin snapshot; concurrent topology changes can cause a bounded reconciliation error.
+
+Focus, selection, client-relative movement, mode, and session-switch actions remain intentionally absent because they act relative to a transient action client rather than a named attached client.
 
 ## Fixed terminal streams
 

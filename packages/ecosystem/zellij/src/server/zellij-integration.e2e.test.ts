@@ -34,9 +34,31 @@ import {
 
 import { installZellij } from "../install";
 import { openZellijConnection } from "./connection";
-import { defineZellijBackend, type ZellijBackend } from "./index";
+import {
+  defineZellijBackend,
+  zellijOperationHandlers,
+  type ZellijBackend,
+  type ZellijOperationResult,
+} from "./index";
 import { spawnZellijPipe } from "./zellij-process";
 
+const createdTabId = (result: ZellijOperationResult) => {
+  if (result.outcome !== "success" || result.created?.kind !== "tab") {
+    throw new Error(
+      `Expected tab creation to succeed: ${JSON.stringify(result)}`,
+    );
+  }
+  return result.created.tabId;
+};
+const operationContext = () => ({
+  instance: {
+    getInstanceId: () => "test",
+    getDeepLinkPrefix: () => "overmux://test",
+  },
+  invalidate: () => undefined,
+  notifications: { send: async () => undefined },
+  signal: AbortSignal.timeout(10_000),
+});
 const execFileAsync = promisify(execFile);
 const testRoot = resolve(".test-tmp", `zi-${process.pid}`);
 const configDirectory = resolve(testRoot, "config");
@@ -408,6 +430,90 @@ describe("real event-driven Zellij integration", () => {
     expect(replacedRuntime.failures).toEqual([]);
     await replacedRuntime.connection.close();
     await replacedRuntime.connection.removePlugin();
+  });
+
+  it("creates from a terminal cwd without focus and reconciles native tab moves", async () => {
+    const sessionName = uniqueName("targeted-operations");
+    await startSession(sessionName);
+    await waitForSessionCacheFile(sessionName, "session-metadata.kdl");
+    const backend = createBackend(sessionName);
+    const operations = zellijOperationHandlers({ backend });
+    await backend.read();
+    const initial = await waitForSession(backend, sessionName);
+    const first = initial.tabs[0]!.info.tab_id;
+
+    // Zellij returns without reporting topology for a one-tab move, so neither direction may await an event.
+    for (const direction of ["left", "right"] as const) {
+      await expect(
+        operations.moveTab.handle(
+          { direction, sessionName, tabId: first },
+          operationContext(),
+        ),
+      ).resolves.toEqual({ outcome: "success" });
+    }
+    const sourceDirectory = resolve(testRoot, "source cwd");
+    const cwdOutput = resolve(testRoot, "created-cwd.txt");
+    await mkdir(sourceDirectory);
+    const sourceResult = await operations.createTab.handle(
+      {
+        command: [testShell],
+        cwd: sourceDirectory,
+        name: "source",
+        sessionName,
+      },
+      operationContext(),
+    );
+    const second = createdTabId(sourceResult);
+    const sourcePane = await vi.waitFor(
+      () => {
+        const sourceTab = backend
+          .state()
+          .sessions.find((session) => session.name === sessionName)!
+          .tabs.find((tab) => tab.info.tab_id === second)!;
+        const pane = sourceTab.panes.find((pane) => !pane.is_plugin);
+        expect(pane).toBeDefined();
+        return pane!;
+      },
+      { timeout: 10_000 },
+    );
+    const created = await operations.createTab.handle(
+      {
+        command: ["sh", "-c", 'pwd > "$1"; exec sleep 3600', "sh", cwdOutput],
+        fromPane: { id: sourcePane.id, isPlugin: false },
+        name: "derived",
+        sessionName,
+      },
+      operationContext(),
+    );
+    const third = createdTabId(created);
+    await vi.waitFor(async () => {
+      expect((await readFile(cwdOutput, "utf8")).trim()).toBe(sourceDirectory);
+    });
+    const moves = [
+      { direction: "right", expected: [first, third, second] },
+      { direction: "right", expected: [second, first, third] },
+      { direction: "left", expected: [first, third, second] },
+      { direction: "left", expected: [first, second, third] },
+    ] as const;
+    for (const { direction, expected } of moves) {
+      await expect(
+        operations.moveTab.handle(
+          { direction, sessionName, tabId: second },
+          operationContext(),
+        ),
+      ).resolves.toEqual({ outcome: "success" });
+      const tabs = backend
+        .state()
+        .sessions.find((session) => session.name === sessionName)!.tabs;
+      expect(
+        [...tabs]
+          .sort((left, right) => left.info.position - right.info.position)
+          .map((tab) => tab.info.tab_id),
+      ).toEqual(expected);
+      expect(
+        tabs.filter((tab) => tab.info.active).map((tab) => tab.info.tab_id),
+      ).toEqual([first]);
+    }
   });
 
   it("automatically anchors in a live session when an exited session sorts first", async () => {

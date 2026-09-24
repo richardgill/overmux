@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, test as testCases, vi } from "vitest";
 
 import type { ZellijState } from "../shared/state-contract";
 import type { ZellijBackend, ZellijReconciliation } from "./backend";
 import { zellijOperationHandlers } from "./operations";
+import { runZellijCommand } from "./zellij-process";
+
+vi.mock("./zellij-process", () => ({ runZellijCommand: vi.fn() }));
 
 const state = {
   backend: { id: "test" },
@@ -28,7 +31,17 @@ const context = () => ({
   notifications: { send: async () => undefined },
   signal: new AbortController().signal,
 });
-const setup = () => {
+const setup = (currentState = state) => {
+  const query = vi
+    .mocked(runZellijCommand)
+    .mockReset()
+    .mockImplementation(async (args) =>
+      JSON.stringify(
+        args[1] === "demo"
+          ? [{ id: 7, is_plugin: false, pane_cwd: "/source work" }]
+          : [],
+      ),
+    );
   const mutate = vi.fn(
     async (
       args: readonly string[],
@@ -43,9 +56,9 @@ const setup = () => {
   );
   const backend = {
     mutate,
-    read: vi.fn(async () => state),
+    read: vi.fn(async () => currentState),
   } as unknown as ZellijBackend;
-  return { mutate, operations: zellijOperationHandlers({ backend }) };
+  return { mutate, operations: zellijOperationHandlers({ backend }), query };
 };
 
 describe("Zellij operations", () => {
@@ -153,6 +166,161 @@ describe("Zellij operations", () => {
       output: string,
     ) => unknown;
     expect(killReconciliation("")).toBeUndefined();
+  });
+
+  testCases.each([
+    {
+      name: "conflicting cwd",
+      fromPane: { id: 7, isPlugin: false },
+      cwd: "/work",
+    },
+    { name: "plugin source", fromPane: { id: 7, isPlugin: true } },
+    { name: "negative pane ID", fromPane: { id: -1, isPlugin: false } },
+    { name: "incomplete pane identity", fromPane: { id: 7 } },
+  ])("rejects $name for source-pane creation", ({ name: _name, ...input }) => {
+    const { operations } = setup();
+    expect(
+      operations.createTab.input.safeParse({ sessionName: "demo", ...input })
+        .success,
+    ).toBe(false);
+  });
+
+  testCases.each([
+    { direction: "up", sessionName: "demo", tabId: 4 },
+    { direction: "left", sessionName: "", tabId: 4 },
+    { direction: "right", sessionName: "demo", tabId: -1 },
+    { direction: "right", sessionName: "demo", tabId: 1.5 },
+  ])("rejects invalid move input: $direction/$sessionName/$tabId", (input) => {
+    expect(setup().operations.moveTab.input.safeParse(input).success).toBe(
+      false,
+    );
+  });
+
+  it("uses the source pane's reported cwd explicitly and keeps creation options", async () => {
+    const { mutate, operations, query } = setup();
+    const input = operations.createTab.input.parse({
+      command: ["sh"],
+      fromPane: { id: 7, isPlugin: false },
+      name: "source",
+      sessionName: "demo",
+    });
+    await expect(
+      operations.createTab.handle(input, context()),
+    ).resolves.toEqual({
+      created: { kind: "tab", tabId: 8 },
+      outcome: "success",
+    });
+    expect(query).toHaveBeenCalledWith(
+      ["--session", "demo", "action", "list-panes", "--all", "--json"],
+      expect.any(AbortSignal),
+    );
+    expect(mutate.mock.calls[0]?.[0]).toEqual([
+      "--session",
+      "demo",
+      "action",
+      "new-tab",
+      "--no-focus",
+      "--name",
+      "source",
+      "--cwd",
+      "/source work",
+      "--",
+      "sh",
+    ]);
+  });
+
+  testCases.each([undefined, ""])(
+    "reports unavailable cwd (%s) without a fallback",
+    async (pane_cwd) => {
+      const { mutate, operations, query } = setup();
+      query.mockResolvedValue(
+        JSON.stringify([{ id: 7, is_plugin: false, pane_cwd }]),
+      );
+      await expect(
+        operations.createTab.handle(
+          {
+            fromPane: { id: 7, isPlugin: false },
+            sessionName: "demo",
+          },
+          context(),
+        ),
+      ).resolves.toEqual({
+        message:
+          "Working directory unavailable for terminal pane 7 in session demo",
+        outcome: "error",
+      });
+      expect(mutate).not.toHaveBeenCalled();
+    },
+  );
+
+  testCases.each([
+    { name: "disappeared pane", panes: [] },
+    {
+      name: "plugin with the same numeric ID",
+      panes: [{ id: 7, is_plugin: true }],
+    },
+  ])("returns not-found for $name in CLI metadata", async ({ panes }) => {
+    const { mutate, operations, query } = setup();
+    query.mockResolvedValue(JSON.stringify(panes));
+    await expect(
+      operations.createTab.handle(
+        {
+          fromPane: { id: 7, isPlugin: false },
+          sessionName: "demo",
+        },
+        context(),
+      ),
+    ).resolves.toEqual({ outcome: "not-found" });
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("does not resolve a source pane or tab from another session", async () => {
+    const otherSession = { name: "other", tabs: [] };
+    const { mutate, operations } = setup({
+      ...state,
+      sessions: [...state.sessions, otherSession],
+    });
+    for (const sessionName of ["missing", "other"]) {
+      await expect(
+        operations.createTab.handle(
+          {
+            fromPane: { id: 7, isPlugin: false },
+            sessionName,
+          },
+          context(),
+        ),
+      ).resolves.toEqual({ outcome: "not-found" });
+      await expect(
+        operations.moveTab.handle(
+          {
+            direction: "left",
+            sessionName,
+            tabId: 4,
+          },
+          context(),
+        ),
+      ).resolves.toEqual({ outcome: "not-found" });
+    }
+    await expect(
+      operations.createTab.handle(
+        {
+          fromPane: { id: 99, isPlugin: false },
+          sessionName: "demo",
+        },
+        context(),
+      ),
+    ).resolves.toEqual({ outcome: "not-found" });
+    await expect(
+      operations.moveTab.handle(
+        {
+          direction: "right",
+          sessionName: "demo",
+          tabId: 99,
+        },
+        context(),
+      ),
+    ).resolves.toEqual({ outcome: "not-found" });
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("returns not-found without mutating and reports disconnected state", async () => {
