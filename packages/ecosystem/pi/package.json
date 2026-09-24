@@ -1,6 +1,6 @@
 {
   "name": "@overmux/pi",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "MIT",
   "description": "Pi extension and private Unix-socket protocol for Overmux",
   "keywords": [
@@ -95,7 +95,7 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
-    "overmux": "^0.0.6",
+    "overmux": "^0.0.7",
     "react": "^19.0.0"
   },
   "peerDependenciesMeta": {
