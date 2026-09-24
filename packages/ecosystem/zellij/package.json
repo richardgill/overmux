@@ -1,0 +1,81 @@
+{
+  "name": "@overmux/zellij",
+  "version": "0.0.4",
+  "license": "MIT",
+  "description": "Reusable Zellij state, operations, and terminal streaming for Overmux",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/zellij",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/zellij"
+  },
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./install": {
+      "types": "./dist/install/index.d.ts",
+      "import": "./dist/install/index.js"
+    },
+    "./styles.css": "./dist/react/styles.css",
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_LICENSES.txt",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "overmux.wasm",
+    "overmux-plugin.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm check-plugin-artifact && rm -rf dist && vp pack && cp src/react/styles.css dist/react/styles.css && node scripts/check-react-build.ts",
+    "build-plugin": "node scripts/build-zellij-plugin.ts",
+    "check-plugin": "pnpm build-plugin --check && pnpm exec turbo run integration-test --filter @overmux/zellij",
+    "check-plugin-artifact": "node scripts/check-zellij-plugin-artifact.ts",
+    "integration-test": "vitest run --project integration",
+    "test": "vitest run --project node --project react",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@overmux/pty": "workspace:*",
+    "@overmux/terminal-stream": "workspace:*",
+    "@overmux/xterm": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
+    "overmux": "workspace:*",
+    "react-dom": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "overmux": "^0.0.6",
+    "react": "^19.0.0"
+  }
+}

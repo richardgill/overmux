@@ -1,0 +1,65 @@
+diff --git a/src/browser/CoreBrowserTerminal.ts b/src/browser/CoreBrowserTerminal.ts
+index 14e7c1216..8b53a839e 100644
+--- a/src/browser/CoreBrowserTerminal.ts
++++ b/src/browser/CoreBrowserTerminal.ts
+@@ -613,6 +613,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+ 
+       let but: CoreMouseButton;
+       let action: CoreMouseAction | undefined;
++      let repeat = 1;
+       switch ((ev as any).overrideType || ev.type) {
+         case 'mousemove':
+           action = CoreMouseAction.MOVE;
+@@ -654,6 +655,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+           if (lines === 0) {
+             return false;
+           }
++          repeat = Math.abs(lines);
+           action = deltaY < 0 ? CoreMouseAction.UP : CoreMouseAction.DOWN;
+           but = CoreMouseButton.WHEEL;
+           break;
+@@ -668,17 +670,22 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+         return false;
+       }
+ 
+-      return self.coreMouseService.triggerMouseEvent({
+-        col: pos.col,
+-        row: pos.row,
+-        x: pos.x,
+-        y: pos.y,
+-        button: but,
+-        action,
+-        ctrl: ev.ctrlKey,
+-        alt: ev.altKey,
+-        shift: ev.shiftKey
+-      });
++      // Preserve wheel magnitude: https://github.com/xtermjs/xterm.js/pull/5803
++      let handled = false;
++      for (let i = 0; i < repeat; i++) {
++        handled = self.coreMouseService.triggerMouseEvent({
++          col: pos.col,
++          row: pos.row,
++          x: pos.x,
++          y: pos.y,
++          button: but,
++          action,
++          ctrl: ev.ctrlKey,
++          alt: ev.altKey,
++          shift: ev.shiftKey
++        }) || handled;
++      }
++      return handled;
+     }
+ 
+     /**
+@@ -836,7 +843,9 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+ 
+         // Construct and send sequences
+         const sequence = C0.ESC + (this.coreService.decPrivateModes.applicationCursorKeys ? 'O' : '[') + (ev.deltaY < 0 ? 'A' : 'B');
+-        this.coreService.triggerDataEvent(sequence, true);
++        for (let i = 0; i < Math.abs(lines); i++) {
++          this.coreService.triggerDataEvent(sequence, true);
++        }
+         return this.cancel(ev, true);
+       }
+     }, { passive: false }));

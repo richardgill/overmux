@@ -1,0 +1,36 @@
+name: Setup and install
+description: Set up repository tools, restore the pnpm cache, and install dependencies
+
+outputs:
+  cache-hit:
+    description: Whether the pnpm store cache was hit
+    value: ${{ steps.pnpm-cache.outputs.cache-hit }}
+  store-path:
+    description: The pnpm store path
+    value: ${{ steps.pnpm-store.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up mise
+      uses: jdx/mise-action@v3
+      with:
+        install: true
+        cache: true
+
+    - name: Get pnpm store path
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm cache
+      id: pnpm-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile --prefer-offline

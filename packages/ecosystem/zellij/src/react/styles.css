@@ -1,0 +1,30 @@
+@layer om.components {
+  :where([data-om-zellij-terminal]) {
+    display: flex;
+    position: relative;
+    min-block-size: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    color: var(--om-color-fg, inherit);
+    background: var(--om-color-surface, transparent);
+    font-family: var(--om-font-mono, monospace);
+  }
+
+  :where([data-om-zellij-terminal] .om-zellij-terminal-close) {
+    align-self: end;
+    border: 1px solid var(--om-color-border, currentColor);
+    border-radius: var(--om-radius, 0.5rem);
+    color: inherit;
+    background: var(--om-color-panel, transparent);
+  }
+
+  :where([data-om-zellij-terminal] .om-zellij-terminal-error) {
+    color: var(--om-color-danger, currentColor);
+  }
+}
+
+@media (forced-colors: active) {
+  :where([data-om-zellij-terminal]) {
+    forced-color-adjust: auto;
+  }
+}

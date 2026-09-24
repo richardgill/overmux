@@ -1,0 +1,133 @@
+{
+  "name": "@overmux/desktop",
+  "version": "0.0.3",
+  "private": true,
+  "license": "MIT",
+  "description": "Secure Electron desktop shell for an independently running Overmux server",
+  "homepage": "https://github.com/richardgill/overmux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "apps/desktop"
+  },
+  "author": {
+    "name": "Richard Gill",
+    "email": "richard@rgill.co.uk"
+  },
+  "type": "module",
+  "main": "dist/main/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build && vp pack",
+    "package:linux": "rm -rf release && pnpm -w build && electron-builder --linux --publish never",
+    "package:linux:dir": "rm -rf release && pnpm -w build && electron-builder --linux dir --x64 --publish never",
+    "package:mac": "rm -rf release && pnpm -w build && electron-builder --mac zip --publish never",
+    "package:mac:arm64": "rm -rf release && pnpm -w build && electron-builder --mac zip --arm64 --publish never",
+    "package:mac:x64": "rm -rf release && pnpm -w build && electron-builder --mac zip --x64 --publish never",
+    "package:mac:dir": "rm -rf release && pnpm -w build && electron-builder --mac dir --publish never",
+    "dev": "pnpm build && electron .",
+    "start": "electron .",
+    "test": "vp pack && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "build": {
+    "appId": "com.overmux.desktop",
+    "productName": "Overmux",
+    "artifactName": "Overmux-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "publish": null,
+    "afterExtract": "./scripts/preserve-electron-licenses.ts",
+    "beforePack": "./scripts/generate-dependency-notices.ts",
+    "files": [
+      "dist/THIRD_PARTY_NOTICES.md",
+      "dist/config/index.js",
+      "dist/main/**/*.js",
+      "dist/main/**/*.cjs",
+      "dist/renderer/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "loadBrowserProcessSpecificV8Snapshot": false,
+      "grantFileProtocolExtraPrivileges": true
+    },
+    "protocols": [
+      {
+        "name": "Overmux deep link",
+        "schemes": [
+          "overmux"
+        ]
+      }
+    ],
+    "linux": {
+      "artifactName": "Overmux-Desktop-${version}-linux-x64.${ext}",
+      "category": "Development",
+      "executableName": "overmux-desktop",
+      "maintainer": "Richard Gill <richard@rgill.co.uk>",
+      "synopsis": "Desktop shell for Overmux",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "vendor": "Overmux"
+    },
+    "deb": {
+      "artifactName": "overmux-desktop_${version}_amd64.${ext}",
+      "packageCategory": "devel",
+      "packageName": "overmux-desktop"
+    },
+    "mac": {
+      "artifactName": "Overmux-Desktop-${version}-mac-${arch}.${ext}",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "target": [
+        "zip"
+      ]
+    }
+  },
+  "dependencies": {
+    "jiti": "catalog:"
+  },
+  "devDependencies": {
+    "@electron/asar": "catalog:",
+    "@electron/fuses": "catalog:",
+    "@overmux/shared": "workspace:*",
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

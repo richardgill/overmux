@@ -1,0 +1,45 @@
+{
+  "name": "@overmux/pty",
+  "version": "0.0.4",
+  "license": "MIT",
+  "description": "Reusable server-side PTY process primitive for Overmux plugins",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/pty",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/pty"
+  },
+  "type": "module",
+  "exports": {
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vp pack",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-pty": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "vitest": "catalog:"
+  }
+}

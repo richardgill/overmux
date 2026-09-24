@@ -1,0 +1,158 @@
+name: Desktop release
+
+on:
+  workflow_call:
+    inputs:
+      release_commit:
+        description: Exact CI-verified desktop release commit
+        required: true
+        type: string
+      release_tag:
+        description: Independent desktop-v<version> tag
+        required: true
+        type: string
+
+concurrency:
+  group: desktop-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_COMMIT: ${{ inputs.release_commit }}
+  RELEASE_TAG: ${{ inputs.release_tag }}
+
+jobs:
+  prepare:
+    name: Prepare desktop tag
+    runs-on: namespace-profile-overmux
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      should_release: ${{ steps.prepare.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_commit }}
+          fetch-depth: 0
+      - uses: ./.github/shared
+      - name: Pin tag unless already published
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/desktop/scripts/desktop-release.ts prepare "$RELEASE_TAG" "$RELEASE_COMMIT"
+
+  linux-x64:
+    name: Linux x64 packages
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_commit }}
+          fetch-depth: 0
+
+      - uses: ./.github/shared
+
+      - name: Validate desktop source
+        run: node apps/desktop/scripts/desktop-release.ts validate-source "$RELEASE_TAG" "$RELEASE_COMMIT"
+
+      - name: Build AppImage and Debian package
+        run: pnpm --filter @overmux/desktop package:linux
+
+      - name: Verify package contents
+        run: node apps/desktop/scripts/desktop-release.ts verify linux-x64
+
+      - name: Smoke-test packaged AppImage
+        run: xvfb-run --auto-servernum node apps/desktop/scripts/desktop-release.ts smoke linux-x64
+
+      - name: Stage Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-x64
+          overwrite: true
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+          if-no-files-found: error
+
+  macos:
+    name: macOS ${{ matrix.architecture }} ZIP
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: arm64
+            runner: macos-15
+          - architecture: x64
+            runner: macos-15-intel
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_commit }}
+          fetch-depth: 0
+
+      - uses: ./.github/shared
+
+      - name: Validate desktop source
+        run: node apps/desktop/scripts/desktop-release.ts validate-source "$RELEASE_TAG" "$RELEASE_COMMIT"
+
+      - name: Build ZIP
+        run: pnpm --filter @overmux/desktop package:mac:${{ matrix.architecture }}
+
+      - name: Verify package contents
+        run: node apps/desktop/scripts/desktop-release.ts verify mac-${{ matrix.architecture }}
+
+      - name: Smoke-test packaged application
+        run: node apps/desktop/scripts/desktop-release.ts smoke mac-${{ matrix.architecture }}
+
+      - name: Stage macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-mac-${{ matrix.architecture }}
+          overwrite: true
+          path: apps/desktop/release/*-mac-${{ matrix.architecture }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish complete desktop release
+    needs:
+      - linux-x64
+      - macos
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_commit }}
+          fetch-depth: 0
+
+      - uses: ./.github/shared
+
+      - name: Download verified artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: apps/desktop/release
+
+      - name: Generate aggregate checksums and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/desktop/scripts/desktop-release.ts publish "$RELEASE_TAG" "$RELEASE_COMMIT"

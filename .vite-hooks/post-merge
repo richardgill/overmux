@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+if ! git rev-parse --verify ORIG_HEAD >/dev/null 2>&1; then
+  exit 0
+fi
+
+if git diff --quiet ORIG_HEAD HEAD -- pnpm-lock.yaml; then
+  exit 0
+fi
+
+pnpm install

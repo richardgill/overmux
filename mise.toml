@@ -1,0 +1,8 @@
+[tools]
+node = "24.20.0"
+pnpm = "10.33.0"
+tmux = "3.6a"
+zellij = "0.45.1"
+
+[settings]
+idiomatic_version_file_enable_tools = ["node", "pnpm"]

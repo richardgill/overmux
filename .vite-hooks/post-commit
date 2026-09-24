@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$repo_root" || exit 0
+
+nohup sh -c '
+cd "$1" || exit 0
+if command -v timeout >/dev/null 2>&1; then
+  exec timeout 180s scripts/local-ci.sh
+fi
+if command -v gtimeout >/dev/null 2>&1; then
+  exec gtimeout 180s scripts/local-ci.sh
+fi
+' sh "$repo_root" >/dev/null 2>&1 </dev/null &

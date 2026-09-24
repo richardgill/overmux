@@ -1,0 +1,68 @@
+{
+  "name": "@overmux/git",
+  "version": "0.0.6",
+  "license": "MIT",
+  "description": "Authorized path-based Git resources and operations for Overmux",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/git",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/git"
+  },
+  "type": "module",
+  "exports": {
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vp pack && cp src/react/styles.css dist/styles.css",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@overmux/ui": "workspace:*",
+    "@pierre/diffs": "catalog:",
+    "@pierre/trees": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
+    "overmux": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "overmux": "^0.0.6",
+    "react": "^19.0.0"
+  }
+}

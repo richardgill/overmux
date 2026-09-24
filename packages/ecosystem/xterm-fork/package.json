@@ -1,0 +1,65 @@
+{
+  "name": "@overmux/xterm-fork",
+  "private": true,
+  "version": "6.0.0-overmux.1",
+  "description": "Overmux-maintained xterm.js with input transformation for keyboard, text and paste",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/richardgill/overmux.git",
+    "directory": "packages/ecosystem/xterm-fork"
+  },
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/xterm-fork#readme",
+  "bugs": {
+    "url": "https://github.com/richardgill/overmux/issues"
+  },
+  "main": "dist/lib/xterm.js",
+  "module": "dist/lib/xterm.mjs",
+  "types": "dist/typings/xterm.d.ts",
+  "style": "dist/css/xterm.css",
+  "exports": {
+    ".": {
+      "types": "./dist/typings/xterm.d.ts",
+      "import": "./dist/lib/xterm.mjs",
+      "require": "./dist/lib/xterm.js"
+    },
+    "./css/xterm.css": "./dist/css/xterm.css"
+  },
+  "files": [
+    "lib",
+    "css",
+    "typings",
+    "src",
+    "docs",
+    "LICENSE",
+    "README.md",
+    "FORK.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mts build",
+    "test": "pnpm run test:release",
+    "pack:tarball": "node scripts/build.mts pack",
+    "local-ci": "pnpm run test:release && pnpm run build",
+    "prepublishOnly": "node scripts/publish-root-guard.mts",
+    "changeset": "node scripts/changeset.mts",
+    "prepare-release": "node scripts/prepare-release.mts",
+    "release": "node scripts/release.mts",
+    "test:release": "node --test tests/release*.test.mts"
+  },
+  "engines": {
+    "node": "^24.20.0"
+  },
+  "devDependencies": {
+    "@changesets/parse": "catalog:",
+    "@playwright/test": "catalog:",
+    "@xterm/addon-clipboard": "catalog:",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/addon-unicode11": "catalog:",
+    "@xterm/addon-webgl": "catalog:",
+    "@xterm/addon-web-links": "catalog:"
+  }
+}

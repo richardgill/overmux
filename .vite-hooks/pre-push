@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$repo_root" || exit 0
+nohup scripts/local-ci.sh >/dev/null 2>&1 </dev/null &

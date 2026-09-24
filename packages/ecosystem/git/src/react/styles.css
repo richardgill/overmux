@@ -1,0 +1,210 @@
+@layer om.components {
+  @scope (
+    [data-om-git-changes-sidebar],
+    [data-om-git-diff],
+    [data-om-source-control-view]
+  ) {
+    :where(:scope) {
+      color: var(--om-color-fg, inherit);
+      background: var(--om-color-surface, transparent);
+      font-family: var(--om-font-sans, sans-serif);
+    }
+    :where(:scope[data-om-git-changes-sidebar]) {
+      display: flex;
+      min-block-size: 0;
+      block-size: 100%;
+      flex-direction: column;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: var(--om-spacing, 0.75rem);
+    }
+    :where(.om-git-changes-header, .om-git-changes-group) {
+      border-block-end: 1px solid var(--om-color-border, currentColor);
+      padding-block: calc(var(--om-spacing, 0.75rem) * 0.5);
+    }
+    :where(.om-git-changes-header) {
+      flex: none;
+    }
+    :where(.om-git-changes-group) {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+    }
+    :where(.om-git-changes-group h2) {
+      margin: 0 0 calc(var(--om-spacing, 0.75rem) * 0.5);
+      font-size: inherit;
+    }
+    :where(.om-git-change-tree) {
+      --trees-bg-override: var(--om-color-surface, transparent);
+      --trees-bg-muted-override: var(--om-color-panel, transparent);
+      --trees-border-color-override: var(--om-color-border, currentColor);
+      --trees-fg-override: var(--om-color-fg, inherit);
+      --trees-font-family-override: var(--om-font-sans, sans-serif);
+      --trees-padding-inline-override: 0px;
+      --trees-selected-bg-override: var(--om-color-panel, transparent);
+      display: block;
+      min-block-size: 0;
+      inline-size: 100%;
+      flex: none;
+    }
+    :where(.om-git-change-actions) {
+      display: flex;
+      flex-direction: column;
+      gap: calc(var(--om-spacing, 0.75rem) * 0.25);
+      min-inline-size: 7rem;
+      padding: calc(var(--om-spacing, 0.75rem) * 0.5);
+      border: 1px solid var(--om-color-border, currentColor);
+      border-radius: var(--om-radius, 0.5rem);
+      color: var(--om-color-fg, inherit);
+      background: var(--om-color-panel, Canvas);
+    }
+    :where(.om-git-change-actions button) {
+      border: 0;
+      color: inherit;
+      background: transparent;
+      font: inherit;
+      text-align: start;
+    }
+    :where(.om-git-diff-file) {
+      position: relative;
+      border: 1px solid var(--om-color-border, currentColor);
+      border-radius: var(--om-radius, 0.5rem);
+      margin-block-end: var(--om-spacing, 0.75rem);
+      overflow: clip;
+    }
+    :where(.om-git-diff-file[data-om-file-flash])::after {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      box-shadow: inset 0 0 0 2px var(--om-color-accent, Highlight);
+      content: "";
+      pointer-events: none;
+      animation: om-git-file-flash 1400ms ease-out both;
+    }
+    :where(.om-git-diff-header) {
+      position: sticky;
+      z-index: 2;
+      inset-block-start: 0;
+      display: flex;
+      gap: var(--om-spacing, 0.75rem);
+      align-items: center;
+      padding: calc(var(--om-spacing, 0.75rem) * 0.75);
+      background: var(--om-color-panel, var(--om-color-surface, Canvas));
+    }
+    :where(.om-git-diff-header-content) {
+      min-inline-size: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    :where(.om-git-diff-header-stats) {
+      display: flex;
+      flex: none;
+      gap: calc(var(--om-spacing, 0.75rem) * 0.5);
+    }
+    :where(.om-git-diff-stat-additions) {
+      color: var(--om-color-success, #3fb950);
+    }
+    :where(.om-git-diff-stat-deletions) {
+      color: var(--om-color-danger, #f85149);
+    }
+    :where(.om-git-diff-patch) {
+      --diffs-font-family: var(--om-font-mono, monospace);
+      display: block;
+      overflow: hidden;
+    }
+    :where(.om-git-diff-expander) {
+      display: flex;
+      min-block-size: 2rem;
+      align-items: stretch;
+      color: var(--om-color-fg, #c0caf5);
+      background: var(--om-color-panel, #1f3a5f);
+      font-family: var(--om-font-sans, sans-serif);
+      font-size: 0.75rem;
+    }
+    :where(.om-git-diff-expand-button) {
+      display: inline-flex;
+      inline-size: 2rem;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-inline-end: 1px solid var(--om-color-border, #3b4261);
+      padding: 0;
+      color: var(--om-color-accent, #7aa2f7);
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+    }
+    :where(.om-git-diff-expand-button svg) {
+      display: block;
+      fill: currentColor;
+    }
+    :where(.om-git-diff-expand-button:hover) {
+      background: color-mix(
+        in srgb,
+        var(--om-color-accent, #7aa2f7) 16%,
+        transparent
+      );
+    }
+    :where(.om-git-diff-expand-button:focus-visible) {
+      position: relative;
+      z-index: 1;
+      outline: 2px solid var(--om-color-accent, #7aa2f7);
+      outline-offset: -2px;
+    }
+    :where(.om-git-diff-expander-label) {
+      min-inline-size: 0;
+      flex: 1 1 auto;
+      align-self: center;
+      overflow: hidden;
+      padding-inline: 0.75rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    :where(.om-git-state[data-om-state="error"]) {
+      color: var(--om-color-danger, currentColor);
+    }
+    :where(
+      :scope[data-om-source-control-view],
+      .om-source-control-split,
+      .om-source-control-sidebar,
+      .om-source-control-diff
+    ) {
+      min-block-size: 0;
+      block-size: 100%;
+    }
+    :where(.om-source-control-sidebar, .om-source-control-diff) {
+      min-inline-size: 0;
+      outline: 2px solid transparent;
+      outline-offset: -2px;
+    }
+    :where(
+      .om-source-control-sidebar,
+      .om-source-control-diff
+    )[data-om-pane-active] {
+      outline-color: var(--om-color-accent, Highlight);
+    }
+  }
+
+  @keyframes om-git-file-flash {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @media (forced-colors: active) {
+    @scope (
+      [data-om-git-changes-sidebar],
+      [data-om-git-diff],
+      [data-om-source-control-view]
+    ) {
+      :where(:scope) {
+        forced-color-adjust: auto;
+      }
+    }
+  }
+}

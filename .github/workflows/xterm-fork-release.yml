@@ -1,0 +1,37 @@
+name: Release xterm fork
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xterm-fork-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'richardgill/overmux' && startsWith(github.ref, 'refs/tags/xterm-fork-v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/ecosystem/xterm-fork
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.20.0
+          registry-url: https://registry.npmjs.org
+      - run: corepack enable && corepack prepare pnpm@10.33.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/release-guard.mts
+      - run: pnpm run local-ci
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+      - run: |
+          node scripts/release-guard.mts
+          version="$(node -p "require('./package.json').version")"
+          tarball=".test-tmp/overmux-xterm-fork-${version}.tgz"
+          # npm automatically emits provenance for trusted publishing from public source.
+          # Private source remains supported without public provenance; do not force it.
+          npm publish "$tarball" --tag latest --access public

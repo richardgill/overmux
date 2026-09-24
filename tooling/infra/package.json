@@ -1,0 +1,26 @@
+{
+  "name": "@overmux/infra",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "dev-www-cloudflare": "CI=1 CLOUDFLARE_ACCOUNT_ID=00000000000000000000000000000000 CLOUDFLARE_API_TOKEN=local alchemy dev",
+    "github-deployment": "node src/github-deployment.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "alchemy": "catalog:",
+    "effect": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

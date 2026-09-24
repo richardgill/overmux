@@ -1,0 +1,13 @@
+diff --git a/src/common/buffer/AttributeData.ts b/src/common/buffer/AttributeData.ts
+index 6221fb81d..9baf30b60 100644
+--- a/src/common/buffer/AttributeData.ts
++++ b/src/common/buffer/AttributeData.ts
+@@ -152,7 +152,7 @@ export class ExtendedAttrs implements IExtendedAttrs {
+   public get underlineStyle(): UnderlineStyle {
+     // Always return the URL style if it has one
+     if (this._urlId) {
+-      return UnderlineStyle.DASHED;
++      return UnderlineStyle.SINGLE;
+     }
+     return (this._ext & ExtFlags.UNDERLINE_STYLE) >> 26;
+   }

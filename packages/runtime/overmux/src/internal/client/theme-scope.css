@@ -1,0 +1,114 @@
+@layer theme, base, om;
+
+@layer om.components {
+  @scope ([data-om-scope]) to ([data-om-scope]) {
+    :where(:scope) {
+      --_om-color-canvas: #f7f8fa;
+      --_om-color-surface: #ffffff;
+      --_om-color-panel: #f0f2f5;
+      --_om-color-fg: #17202a;
+      --_om-color-muted: #5c6875;
+      --_om-color-border: #c8ced6;
+      --_om-color-accent: #075fd8;
+      --_om-color-accent-fg: #ffffff;
+      --_om-color-danger: #b42318;
+      --_om-color-success: #16794b;
+      --_om-resolved-color-success: var(
+        --om-color-success,
+        var(--_om-color-success)
+      );
+      color: var(--om-color-fg, var(--_om-color-fg));
+      color-scheme: light dark;
+      font-family: var(
+        --om-font-sans,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif
+      );
+    }
+
+    :where(:scope[data-om-scheme="light"]) {
+      color-scheme: light;
+    }
+
+    :where(:scope[data-om-scheme="dark"]) {
+      --_om-color-canvas: #101317;
+      --_om-color-surface: #171b21;
+      --_om-color-panel: #1f252d;
+      --_om-color-fg: #f2f4f7;
+      --_om-color-muted: #aab3bf;
+      --_om-color-border: #46505d;
+      --_om-color-accent: #75a7ff;
+      --_om-color-accent-fg: #101317;
+      --_om-color-danger: #ff8b82;
+      --_om-color-success: #65d6a2;
+      color-scheme: dark;
+    }
+
+    :where(:scope[data-om-contrast="high"]) {
+      --_om-color-canvas: Canvas;
+      --_om-color-surface: Canvas;
+      --_om-color-panel: Canvas;
+      --_om-color-fg: CanvasText;
+      --_om-color-muted: CanvasText;
+      --_om-color-border: CanvasText;
+      --_om-color-accent: Highlight;
+      --_om-color-accent-fg: HighlightText;
+      --_om-color-danger: Mark;
+      --_om-color-success: LinkText;
+    }
+
+    :where([data-om-overlay-root]:empty) {
+      display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :where(:scope[data-om-scheme="system"]) {
+        --_om-color-canvas: #101317;
+        --_om-color-surface: #171b21;
+        --_om-color-panel: #1f252d;
+        --_om-color-fg: #f2f4f7;
+        --_om-color-muted: #aab3bf;
+        --_om-color-border: #46505d;
+        --_om-color-accent: #75a7ff;
+        --_om-color-accent-fg: #101317;
+        --_om-color-danger: #ff8b82;
+        --_om-color-success: #65d6a2;
+      }
+    }
+
+    @media (prefers-contrast: more) {
+      :where(:scope[data-om-contrast="auto"]) {
+        --_om-color-canvas: Canvas;
+        --_om-color-surface: Canvas;
+        --_om-color-panel: Canvas;
+        --_om-color-fg: CanvasText;
+        --_om-color-muted: CanvasText;
+        --_om-color-border: CanvasText;
+        --_om-color-accent: Highlight;
+        --_om-color-accent-fg: HighlightText;
+        --_om-color-danger: Mark;
+        --_om-color-success: LinkText;
+      }
+    }
+
+    @media (forced-colors: active) {
+      :where(:scope) {
+        --_om-color-canvas: Canvas;
+        --_om-color-surface: Canvas;
+        --_om-color-panel: Canvas;
+        --_om-color-fg: CanvasText;
+        --_om-color-muted: CanvasText;
+        --_om-color-border: ButtonBorder;
+        --_om-color-accent: Highlight;
+        --_om-color-accent-fg: HighlightText;
+        --_om-color-danger: Mark;
+        --_om-color-success: LinkText;
+        forced-color-adjust: auto;
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "exclude": ["exports", "types", "nsExports", "nsTypes", "duplicates"],
+  "ignoreExportsUsedInFile": true,
+  "treatConfigHintsAsErrors": true,
+  "workspaces": {
+    ".": {
+      "entry": [
+        "e2e/fixtures/*.{ts,tsx}",
+        "fixtures/*.{ts,tsx}",
+        "fixtures/src/main.tsx",
+      ],
+      "ignoreBinaries": ["op"],
+      "ignoreDependencies": [
+        "@earendil-works/pi-coding-agent",
+        "@earendil-works/pi-tui",
+      ],
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/config/index.ts",
+        "src/main/index.ts",
+        "src/preload/index.ts",
+        "src/preload/remote-notifications.ts",
+      ],
+      "ignoreBinaries": ["codesign", "ditto", "dpkg-deb", "gh"],
+    },
+    "apps/www": {
+      "entry": [
+        "scripts/**/*.unit.test.ts",
+        "src/**/*.unit.test.ts",
+        "src/router.tsx",
+        "src/start.ts",
+      ],
+      "ignoreDependencies": ["cloudflare"],
+    },
+    "packages/ecosystem/xterm-fork": {
+      "entry": ["scripts/*.mts", "tests/*.{mts,ts}"],
+    },
+    "packages/ecosystem/git": {},
+    "packages/ecosystem/pi": {
+      "ignoreDependencies": ["jsonc-parser"],
+    },
+    "packages/ecosystem/pty": {},
+    "packages/ecosystem/terminal-stream": {
+      "entry": [
+        "src/client/index.ts",
+        "src/server/index.ts",
+        "src/shared/index.ts",
+      ],
+    },
+    "packages/runtime/overmux": {
+      "entry": ["src/internal/client/auth/entry.tsx", "src/public/*.ts"],
+    },
+    "packages/runtime/shared": {
+      "entry": ["src/index.ts", "src/node/index.ts"],
+    },
+    "packages/ecosystem/tmux": {
+      "entry": ["src/shared/index.ts"],
+      "ignoreBinaries": ["tmux"],
+    },
+    "packages/ecosystem/zellij": {
+      "entry": [
+        "src/client/index.ts",
+        "src/install/index.ts",
+        "src/react/index.ts",
+        "src/server/index.ts",
+        "src/shared/index.ts",
+      ],
+      "ignoreBinaries": ["tar", "zellij"],
+    },
+    "tooling/infra": {
+      "entry": ["alchemy.run.ts", "src/**/*.unit.test.ts"],
+    },
+    "tooling/tsconfig": {},
+  },
+}

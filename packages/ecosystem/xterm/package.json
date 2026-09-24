@@ -1,0 +1,74 @@
+{
+  "name": "@overmux/xterm",
+  "version": "0.0.6",
+  "license": "MIT",
+  "description": "Reusable xterm browser rendering for Overmux",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/xterm",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/xterm"
+  },
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./webgl": {
+      "types": "./dist/webgl.d.ts",
+      "import": "./dist/webgl.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./keyboard": {
+      "types": "./dist/keyboard.d.ts",
+      "import": "./dist/keyboard.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vp pack && cp src/styles.css dist/styles.css",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xterm/addon-clipboard": "catalog:",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/addon-unicode11": "catalog:",
+    "@xterm/addon-webgl": "catalog:",
+    "@xterm/addon-web-links": "catalog:",
+    "@overmux/xterm-fork": "workspace:*",
+    "@overmux/keybindings": "workspace:*"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
+    "overmux": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "overmux": "^0.0.6",
+    "react": "^19.0.0"
+  }
+}

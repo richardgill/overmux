@@ -1,0 +1,33 @@
+@import "@overmux/xterm-fork/css/xterm.css" layer(om.components);
+
+/* Establishes the generic xterm wrapper layout independent of a terminal backend. */
+/* Consumers can theme its background through --om-xterm-terminal-background. */
+@layer om.components {
+  @scope ([data-om-xterm-terminal]) {
+    :where(:scope) {
+      display: flex;
+      min-block-size: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
+    }
+
+    .om-xterm-terminal-mount {
+      min-block-size: 0;
+      flex: 1 1 auto;
+      overscroll-behavior: contain;
+      touch-action: none;
+    }
+
+    .om-xterm-terminal-mount > .xterm {
+      display: flex;
+      block-size: 100%;
+      flex-direction: column;
+      background: var(--om-xterm-terminal-background, transparent);
+    }
+
+    .xterm-scrollable-element {
+      margin-block-start: auto;
+      flex: 0 0 auto;
+    }
+  }
+}

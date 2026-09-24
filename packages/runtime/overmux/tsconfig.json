@@ -1,0 +1,17 @@
+{
+  "extends": "@overmux/tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "#server-child": ["./src/internal/server/coordinator/server-child.ts"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vite.config.ts"
+  ]
+}

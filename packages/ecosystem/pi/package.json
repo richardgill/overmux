@@ -1,0 +1,117 @@
+{
+  "name": "@overmux/pi",
+  "version": "0.0.6",
+  "license": "MIT",
+  "description": "Pi extension and private Unix-socket protocol for Overmux",
+  "keywords": [
+    "overmux",
+    "pi-package"
+  ],
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/pi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/pi"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=24.20.0"
+  },
+  "bin": {
+    "overmux-pi-send": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./extension": {
+      "types": "./dist/extension.d.ts",
+      "import": "./dist/extension.js"
+    },
+    "./live-events": {
+      "types": "./dist/live-events.d.ts",
+      "import": "./dist/live-events.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && vp pack && cp src/styles.css dist/styles.css",
+    "overmux-pi-send": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@overmux/git": "workspace:*",
+    "@richardgill/pi-config": "0.0.8",
+    "@shikijs/langs": "catalog:",
+    "@shikijs/themes": "catalog:",
+    "jsonc-parser": "catalog:",
+    "lucide-react": "catalog:",
+    "react-markdown": "catalog:",
+    "shiki": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
+    "overmux": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "overmux": "^0.0.6",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

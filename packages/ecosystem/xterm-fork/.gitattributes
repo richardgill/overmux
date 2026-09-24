@@ -1,0 +1,3 @@
+# Unified diff context includes blank-line spaces and space-prefixed upstream tabs.
+# Keep these maintained patches byte-identical; git apply --check validates them.
+patches/*.patch whitespace=-blank-at-eol,-space-before-tab

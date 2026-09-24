@@ -1,0 +1,486 @@
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+
+import {
+  OvermuxPiConfigSchema,
+  type OvermuxPiConfig,
+  type OvermuxPiConfigInput,
+} from "./config.js";
+import {
+  compactAssistantMessageEvent,
+  createLiveEventWriter,
+  liveEventSessionDir,
+  liveEventStreamPath,
+  PROCESS_INSTANCE_ID,
+  registerLiveEventCapture,
+  type CompactAssistantMessageEvent,
+  type LiveEventPayload,
+  type LiveEventRecord,
+  type LiveEventWriter,
+} from "./live-events.js";
+import {
+  inspectDelegate,
+  OVERMUX_PI_DELEGATE_SETTLED_MESSAGE_TYPE,
+  notificationMessage,
+  notificationRenderer,
+  type DelegateNotificationDetails,
+} from "./notification.js";
+import {
+  CHILD_ENV,
+  DEFAULT_OVERMUX_PI_RUNTIME_DIR,
+  ensureRuntimeDir,
+  eventKey,
+  PARENT_SESSION_ENV,
+  parseEnvelope,
+  sendEnvelope,
+  sendUserMessage,
+  socketPathForSession,
+  startReceiver,
+  TASK_SLUG_ENV,
+  TASK_SLUG_PATTERN,
+  type AbortRequest,
+  type AbortResponse,
+  type DelegateSettledEnvelope,
+  type SetModelRequest,
+  type SetModelResponse,
+  type SetThinkingLevelRequest,
+  type SetThinkingLevelResponse,
+  type UserMessageRequest,
+  type UserMessageResponse,
+} from "./protocol.js";
+
+export {
+  CHILD_ENV,
+  eventKey,
+  PARENT_SESSION_ENV,
+  TASK_SLUG_ENV,
+} from "./protocol.js";
+export {
+  OVERMUX_PI_DELEGATE_SETTLED_MESSAGE_TYPE,
+  truncatePiJqOutput,
+} from "./notification.js";
+export {
+  createPiSessionStatusWriter,
+  isLocalPidAlive,
+  piSessionStatusPath,
+  piSessionStatusSchema,
+  parsePiSessionStatus,
+  type PiSessionStatus,
+  type PiSessionStatusUpdate,
+  type PiSessionStatusWriter,
+} from "./session-status.js";
+export {
+  compactAssistantMessageEvent,
+  createLiveEventWriter,
+  liveEventSessionDir,
+  liveEventStreamPath,
+  parseLiveEventRecord,
+  PROCESS_INSTANCE_ID,
+  type CompactAssistantMessageEvent,
+  type LiveEventEnvelope,
+  type LiveEventPayload,
+  type LiveEventRecord,
+  type LiveEventWireRecord,
+  type LiveEventWriter,
+} from "./live-events.js";
+export {
+  parseEnvelope,
+  probePiSession,
+  sendEnvelope,
+  sendUserMessage,
+  socketPathForSession,
+  startReceiver,
+  parseUserMessageRequest,
+  type DelegateSettledEnvelope,
+  type ProbeOptions,
+  type Receiver,
+  type ReceiverOptions,
+  type SenderOptions,
+  type UserMessageInput,
+  type UserMessageRequest,
+  type UserMessageResponse,
+} from "./protocol.js";
+
+export const OVERMUX_PI_DELEGATE_SETTLED_RECEIPT_TYPE =
+  "overmux-pi.delegate-settled-receipt";
+
+export type OvermuxPiOptions = OvermuxPiConfigInput & {
+  env?: NodeJS.ProcessEnv;
+  runtimeDir?: string;
+  ackTimeoutMs?: number;
+  retryDelaysMs?: readonly number[];
+  onLiveEventError?: (error: unknown) => void;
+};
+
+const notificationEnvelope = (details: unknown) => {
+  if (typeof details !== "object" || details === null) {
+    return undefined;
+  }
+  const value = details as Record<string, unknown>;
+  return parseEnvelope(
+    JSON.stringify({
+      childSessionId: value.childSessionId,
+      taskSlug: value.taskSlug,
+      leafId: value.leafId,
+      cwd: value.cwd,
+      timestamp: value.timestamp,
+    }),
+  );
+};
+
+const restoreReceipts = (ctx: ExtensionContext) => {
+  const receipts = new Map<string, DelegateSettledEnvelope>();
+  const delivered = new Set<string>();
+  ctx.sessionManager.getEntries().forEach((entry) => {
+    if (
+      entry.type === "custom" &&
+      entry.customType === OVERMUX_PI_DELEGATE_SETTLED_RECEIPT_TYPE
+    ) {
+      const envelope = parseEnvelope(JSON.stringify(entry.data));
+      if (envelope) {
+        receipts.set(eventKey(envelope), envelope);
+      }
+    }
+    if (
+      entry.type === "custom_message" &&
+      entry.customType === OVERMUX_PI_DELEGATE_SETTLED_MESSAGE_TYPE
+    ) {
+      const envelope = notificationEnvelope(entry.details);
+      if (envelope) {
+        delivered.add(eventKey(envelope));
+      }
+    }
+  });
+  return {
+    eventKeys: new Set(receipts.keys()),
+    pending: [...receipts.values()].filter(
+      (envelope) => !delivered.has(eventKey(envelope)),
+    ),
+  };
+};
+
+const requiredTaskSlug = (taskSlug: string | undefined): string => {
+  if (!taskSlug || !TASK_SLUG_PATTERN.test(taskSlug)) {
+    throw new Error(`Child Pi requires a valid ${TASK_SLUG_ENV}`);
+  }
+  return taskSlug;
+};
+
+const rememberResponse = <Response extends { requestId: string }>(
+  responses: Map<string, Response>,
+  response: Response,
+): Response => {
+  responses.set(response.requestId, response);
+  if (responses.size > 128) {
+    responses.delete(responses.keys().next().value!);
+  }
+  return response;
+};
+
+const injectNotification = async (
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  envelope: DelegateSettledEnvelope,
+  signal: AbortSignal,
+  config: OvermuxPiConfig,
+): Promise<void> => {
+  if (signal.aborted) {
+    return;
+  }
+  const details = await inspectDelegate(pi, envelope, signal, config);
+  if (signal.aborted) {
+    return;
+  }
+  pi.sendMessage(
+    notificationMessage(envelope, details, config),
+    ctx.isIdle() ? { triggerTurn: true } : { deliverAs: "steer" },
+  );
+};
+
+export const overmuxPi = (
+  pi: ExtensionAPI,
+  options: OvermuxPiOptions = {},
+): void => {
+  pi.registerMessageRenderer<DelegateNotificationDetails>(
+    OVERMUX_PI_DELEGATE_SETTLED_MESSAGE_TYPE,
+    notificationRenderer,
+  );
+
+  const {
+    inspectionCommand,
+    inspectionTimeoutMs,
+    supervisionPrompt,
+    liveEventsDir,
+  } = options;
+  const config = OvermuxPiConfigSchema.parse({
+    inspectionCommand,
+    inspectionTimeoutMs,
+    supervisionPrompt,
+    liveEventsDir,
+  });
+  const env = options.env ?? process.env;
+  const isChild = env[CHILD_ENV] === "1";
+  const parentSessionId = isChild ? env[PARENT_SESSION_ENV] : undefined;
+  const childTaskSlug = isChild
+    ? requiredTaskSlug(env[TASK_SLUG_ENV])
+    : undefined;
+  const runtimeDir = options.runtimeDir ?? DEFAULT_OVERMUX_PI_RUNTIME_DIR;
+  const parentSocket = parentSessionId
+    ? socketPathForSession(parentSessionId, runtimeDir)
+    : undefined;
+  let receiver: Awaited<ReturnType<typeof startReceiver>> | undefined;
+  let activeSessionId: string | undefined;
+  let sessionController: AbortController | undefined;
+  let eventKeys = new Set<string>();
+  let abortResponses = new Map<string, AbortResponse>();
+  let modelResponses = new Map<string, SetModelResponse>();
+  let thinkingResponses = new Map<string, SetThinkingLevelResponse>();
+  let userMessageResponses = new Map<string, UserMessageResponse>();
+  const liveEvents = registerLiveEventCapture(pi, {
+    rootDir: config.liveEventsDir,
+    env,
+    onError: options.onLiveEventError,
+  });
+
+  pi.on("session_start", async (event, ctx) => {
+    await liveEvents.start(event, ctx);
+    const previousReceiver = receiver;
+    receiver = undefined;
+    sessionController?.abort();
+    const controller = new AbortController();
+    sessionController = controller;
+    abortResponses = new Map();
+    modelResponses = new Map();
+    thinkingResponses = new Map();
+    userMessageResponses = new Map();
+    await previousReceiver?.close();
+    const ownSessionId = ctx.sessionManager.getSessionId();
+    activeSessionId = ownSessionId;
+    const restored = restoreReceipts(ctx);
+    eventKeys = restored.eventKeys;
+    await ensureRuntimeDir(runtimeDir);
+    const startedReceiver = await startReceiver(
+      socketPathForSession(ownSessionId, runtimeDir),
+      (envelope) => {
+        if (controller.signal.aborted || sessionController !== controller) {
+          return;
+        }
+        const key = eventKey(envelope);
+        if (eventKeys.has(key)) {
+          return;
+        }
+        pi.appendEntry(OVERMUX_PI_DELEGATE_SETTLED_RECEIPT_TYPE, envelope);
+        eventKeys.add(key);
+        void injectNotification(
+          pi,
+          ctx,
+          envelope,
+          controller.signal,
+          config,
+        ).catch(() => undefined);
+      },
+      {
+        onSetModel: async (
+          request: SetModelRequest,
+        ): Promise<SetModelResponse> => {
+          const previous = modelResponses.get(request.requestId);
+          if (previous) {
+            return previous;
+          }
+          if (controller.signal.aborted || sessionController !== controller) {
+            return rememberResponse(modelResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "shutting_down",
+            });
+          }
+          const model = ctx.modelRegistry.find(request.provider, request.id);
+          if (!model) {
+            return rememberResponse(modelResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "not_found",
+            });
+          }
+          try {
+            if (!(await pi.setModel(model))) {
+              return rememberResponse(modelResponses, {
+                version: 1,
+                requestId: request.requestId,
+                ok: false,
+                error: "no_key",
+              });
+            }
+            return rememberResponse(modelResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: true,
+            });
+          } catch {
+            return rememberResponse(modelResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "unavailable",
+            });
+          }
+        },
+        onSetThinkingLevel: (
+          request: SetThinkingLevelRequest,
+        ): SetThinkingLevelResponse => {
+          const previous = thinkingResponses.get(request.requestId);
+          if (previous) {
+            return previous;
+          }
+          if (controller.signal.aborted || sessionController !== controller) {
+            return rememberResponse(thinkingResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "shutting_down",
+            });
+          }
+          try {
+            pi.setThinkingLevel(request.level);
+            return rememberResponse(thinkingResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: true,
+            });
+          } catch {
+            return rememberResponse(thinkingResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "unavailable",
+            });
+          }
+        },
+        onAbort: (request: AbortRequest): AbortResponse => {
+          const previous = abortResponses.get(request.requestId);
+          if (previous) {
+            return previous;
+          }
+          if (controller.signal.aborted || sessionController !== controller) {
+            return rememberResponse(abortResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "shutting_down",
+            });
+          }
+          if (ctx.isIdle()) {
+            return rememberResponse(abortResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "unavailable",
+            });
+          }
+          try {
+            ctx.abort();
+            return rememberResponse(abortResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: true,
+            });
+          } catch {
+            return rememberResponse(abortResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "unavailable",
+            });
+          }
+        },
+        onUserMessage: (request: UserMessageRequest): UserMessageResponse => {
+          const previous = userMessageResponses.get(request.requestId);
+          if (previous) {
+            return previous;
+          }
+          if (controller.signal.aborted || sessionController !== controller) {
+            return rememberResponse(userMessageResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "shutting_down",
+            });
+          }
+          const isIdle = ctx.isIdle();
+          const delivery = isIdle ? "immediate" : request.deliverAs;
+          const userMessageOptions = isIdle
+            ? { expandPromptTemplates: request.expandPromptTemplates }
+            : {
+                deliverAs: request.deliverAs,
+                expandPromptTemplates: request.expandPromptTemplates,
+              };
+          try {
+            pi.sendUserMessage(request.message, userMessageOptions);
+            return rememberResponse(userMessageResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: true,
+              delivery,
+            });
+          } catch {
+            return rememberResponse(userMessageResponses, {
+              version: 1,
+              requestId: request.requestId,
+              ok: false,
+              error: "unavailable",
+            });
+          }
+        },
+      },
+    );
+    if (controller.signal.aborted || sessionController !== controller) {
+      await startedReceiver.close();
+      return;
+    }
+    receiver = startedReceiver;
+    await Promise.all(
+      restored.pending.map((envelope) =>
+        injectNotification(pi, ctx, envelope, controller.signal, config),
+      ),
+    );
+  });
+
+  pi.on("agent_settled", async (_event, ctx) => {
+    const childSessionId = ctx.sessionManager.getSessionId();
+    const leafId = ctx.sessionManager.getLeafId();
+    if (!parentSocket || !leafId || !childTaskSlug) {
+      return;
+    }
+
+    await sendEnvelope(
+      parentSocket,
+      {
+        childSessionId,
+        taskSlug: childTaskSlug,
+        leafId,
+        cwd: ctx.cwd,
+        timestamp: Date.now(),
+      },
+      {
+        ackTimeoutMs: options.ackTimeoutMs,
+        retryDelaysMs: options.retryDelaysMs,
+      },
+    );
+  });
+
+  pi.on("session_shutdown", async (event, ctx) => {
+    if (ctx.sessionManager.getSessionId() !== activeSessionId) {
+      return;
+    }
+    const ownedReceiver = receiver;
+    receiver = undefined;
+    activeSessionId = undefined;
+    sessionController?.abort();
+    sessionController = undefined;
+    await Promise.all([ownedReceiver?.close(), liveEvents.stop(event)]);
+  });
+};

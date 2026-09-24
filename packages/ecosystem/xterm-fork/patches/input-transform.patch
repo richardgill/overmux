@@ -1,0 +1,570 @@
+diff --git a/src/browser/Clipboard.ts b/src/browser/Clipboard.ts
+index ec85b5836..17aca417e 100644
+--- a/src/browser/Clipboard.ts
++++ b/src/browser/Clipboard.ts
+@@ -49,9 +49,11 @@ export function handlePasteEvent(ev: ClipboardEvent, textarea: HTMLTextAreaEleme
+ }
+ 
+ export function paste(text: string, textarea: HTMLTextAreaElement, coreService: ICoreService, optionsService: IOptionsService): void {
+-  text = prepareTextForTerminal(text);
+-  text = bracketTextForPaste(text, coreService.decPrivateModes.bracketedPasteMode && optionsService.rawOptions.ignoreBracketedPasteMode !== true);
+-  coreService.triggerDataEvent(text, true);
++  text = coreService.transformInput({ kind: 'paste', data: prepareTextForTerminal(text) });
++  if (text) {
++    text = bracketTextForPaste(text, coreService.decPrivateModes.bracketedPasteMode && optionsService.rawOptions.ignoreBracketedPasteMode !== true);
++    coreService.triggerDataEvent(text, true);
++  }
+   textarea.value = '';
+ }
+ 
+diff --git a/src/browser/CoreBrowserTerminal.ts b/src/browser/CoreBrowserTerminal.ts
+index 38ad467a5..66e5f78df 100644
+--- a/src/browser/CoreBrowserTerminal.ts
++++ b/src/browser/CoreBrowserTerminal.ts
+@@ -381,6 +381,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+     this._register(addDisposableListener(this.textarea!, 'compositionstart', () => this._compositionHelper!.compositionstart()));
+     this._register(addDisposableListener(this.textarea!, 'compositionupdate', (e: CompositionEvent) => this._compositionHelper!.compositionupdate(e)));
+     this._register(addDisposableListener(this.textarea!, 'compositionend', () => this._compositionHelper!.compositionend()));
++    this._register(addDisposableListener(this.textarea!, 'beforeinput', (ev: InputEvent) => this._compositionHelper!.beforeinput(ev), true));
+     this._register(addDisposableListener(this.textarea!, 'input', (ev: InputEvent) => this._inputEvent(ev), true));
+     this._register(this.onRender(() => this._compositionHelper!.updateCompositionElements()));
+   }
+@@ -1089,7 +1090,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+ 
+     this._onKey.fire({ key: result.key, domEvent: event });
+     this._showCursor();
+-    this.coreService.triggerDataEvent(result.key, true);
++    this.coreService.triggerInputEvent({ kind: 'key', data: result.key, domEvent: event });
+ 
+     // Cancel events when not in screen reader mode so events don't get bubbled up and handled by
+     // other listeners. When screen reader mode is enabled, we don't cancel them (unless ctrl or alt
+@@ -1172,7 +1173,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+ 
+     this._onKey.fire({ key, domEvent: ev });
+     this._showCursor();
+-    this.coreService.triggerDataEvent(key, true);
++    this.coreService.triggerInputEvent({ kind: 'key', data: key, domEvent: ev });
+ 
+     this._keyPressHandled = true;
+ 
+@@ -1190,6 +1191,10 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+    * @param ev The input event to be handled.
+    */
+   protected _inputEvent(ev: InputEvent): boolean {
++    if (!this._keyPressHandled && this._compositionHelper!.input(ev)) {
++      this._unprocessedDeadKey = false;
++      return true;
++    }
+     // Only support emoji IMEs when screen reader mode is disabled as the event must bubble up to
+     // support reading out character input which can doubling up input characters
+     // Based on these event traces: https://github.com/xtermjs/xterm.js/issues/3679
+@@ -1203,7 +1208,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+       this._unprocessedDeadKey = false;
+ 
+       const text = ev.data;
+-      this.coreService.triggerDataEvent(text, true);
++      this.coreService.triggerInputEvent({ kind: 'text', data: text });
+ 
+       this.cancel(ev);
+       return true;
+@@ -1257,6 +1262,15 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+     this.refresh(0, this.rows - 1);
+   }
+ 
++  public cancelPendingInput(): void {
++    this._compositionHelper?.cancelPendingInput();
++    if (this.textarea) { this.textarea.value = ''; }
++    this._keyDownHandled = false;
++    this._keyDownSeen = false;
++    this._keyPressHandled = false;
++    this._unprocessedDeadKey = false;
++  }
++
+   /**
+    * Reset terminal.
+    * Note: Calling this directly from JS is synchronous but does not clear
+@@ -1266,6 +1280,7 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+    * using DECSTR (soft reset, CSI ! p) or RIS instead (hard reset, ESC c).
+    */
+   public reset(): void {
++    this.cancelPendingInput();
+     /**
+      * Since _setup handles a full terminal creation, we have to carry forward
+      * a few things that should not reset.
+diff --git a/src/browser/TestUtils.test.ts b/src/browser/TestUtils.test.ts
+index cf878cbc9..02bdd29b6 100644
+--- a/src/browser/TestUtils.test.ts
++++ b/src/browser/TestUtils.test.ts
+@@ -30,6 +30,7 @@ export class TestTerminal extends CoreBrowserTerminal {
+ }
+ 
+ export class MockTerminal implements ITerminal {
++  public cancelPendingInput(): void { }
+   public onBlur!: Event<void>;
+   public onFocus!: Event<void>;
+   public onA11yChar!: Event<string>;
+@@ -335,6 +336,9 @@ export class MockViewport implements IViewport {
+ }
+ 
+ export class MockCompositionHelper implements ICompositionHelper {
++  public beforeinput(): void { }
++  public input(): boolean { return false; }
++  public cancelPendingInput(): void { }
+   public get isComposing(): boolean {
+     return false;
+   }
+diff --git a/src/browser/Types.ts b/src/browser/Types.ts
+index 10e604114..fbd486014 100644
+--- a/src/browser/Types.ts
++++ b/src/browser/Types.ts
+@@ -12,7 +12,7 @@ import type { Event } from 'vs/base/common/event';
+ /**
+  * A portion of the public API that are implemented identially internally and simply passed through.
+  */
+-type InternalPassthroughApis = Omit<ITerminalApi, 'buffer' | 'parser' | 'unicode' | 'modes' | 'writeln' | 'loadAddon'>;
++type InternalPassthroughApis = Omit<ITerminalApi, 'buffer' | 'parser' | 'unicode' | 'modes' | 'writeln' | 'loadAddon' | 'attachInputTransform'>;
+ 
+ export interface ITerminal extends InternalPassthroughApis, ICoreTerminal {
+   screenElement: HTMLElement | undefined;
+@@ -36,6 +36,9 @@ export type CustomWheelEventHandler = (event: WheelEvent) => boolean;
+ export type LineData = CharData[];
+ 
+ export interface ICompositionHelper {
++  beforeinput(ev: InputEvent): void;
++  input(ev: InputEvent): boolean;
++  cancelPendingInput(): void;
+   readonly isComposing: boolean;
+   compositionstart(): void;
+   compositionupdate(ev: CompositionEvent): void;
+diff --git a/src/browser/input/CompositionHelper.ts b/src/browser/input/CompositionHelper.ts
+index b87ebbea0..5e6333f1e 100644
+--- a/src/browser/input/CompositionHelper.ts
++++ b/src/browser/input/CompositionHelper.ts
+@@ -6,6 +6,7 @@
+ import { IRenderService } from 'browser/services/Services';
+ import { IBufferService, ICoreService, IOptionsService } from 'common/services/Services';
+ import { C0 } from 'common/data/EscapeSequences';
++import { isAndroid } from 'common/Platform';
+ 
+ interface IPosition {
+   start: number;
+@@ -35,6 +36,57 @@ export class CompositionHelper {
+    * in-progress composition.
+    */
+   private _isSendingComposition: boolean;
++  // Cancellation advances the generation so old timers cannot read or emit a fresh composition.
++  private _inputGeneration = 0;
++  private _androidBeforeDelete: string | undefined;
++
++  // Desktop and screen readers keep their existing input ownership.
++  private get _usesAndroidInputEvents(): boolean {
++    return isAndroid && !this._optionsService.rawOptions.screenReaderMode;
++  }
++
++  public beforeinput(ev: InputEvent): void {
++    this._androidBeforeDelete = this._usesAndroidInputEvents && !this._isComposing && !this._isSendingComposition &&
++      !ev.isComposing && ev.inputType === 'deleteContentBackward' && this._textarea.selectionEnd === this._textarea.value.length ?
++      this._textarea.value : undefined;
++  }
++
++  public input(ev: InputEvent): boolean {
++    const beforeDelete = this._androidBeforeDelete;
++    this._androidBeforeDelete = undefined;
++    if (!this._usesAndroidInputEvents) { return false; }
++    // Composition commits (including their propagation timer) retain ownership of their input.
++    if (this._isComposing || this._isSendingComposition || ev.isComposing) { return true; }
++    if (ev.inputType === 'insertText' && ev.data) {
++      this._coreService.triggerInputEvent({ kind: 'text', data: ev.data });
++      return true;
++    }
++    if (ev.inputType === 'deleteContentBackward' && beforeDelete !== undefined) {
++      const value = this._textarea.value;
++      // The textarea is keyboard context, not a copy of the remote command line. Translate only
++      // an observed trailing removal, never replay its prefix or infer remote cursor movements.
++      // Count code points, not UTF-16 units; this does not support arbitrary grapheme editing.
++      if (beforeDelete.startsWith(value) && beforeDelete.length > value.length) {
++        const removed = Array.from(beforeDelete.substring(value.length)).length;
++        this._coreService.triggerInputEvent({ kind: 'text', data: C0.DEL.repeat(removed) });
++      }
++      return true;
++    }
++    return false;
++  }
++
++  // Discard pending commits without replacing or blurring the keyboard's textarea.
++  public cancelPendingInput(): void {
++    this._inputGeneration++;
++    this._androidBeforeDelete = undefined;
++    this._isComposing = false;
++    this._isSendingComposition = false;
++    this._compositionPosition = { start: 0, end: 0 };
++    this._dataAlreadySent = '';
++    this._textarea.value = '';
++    this._compositionView.textContent = '';
++    this._compositionView.classList.remove('active');
++  }
+ 
+   /**
+    * Data already sent due to keydown event.
+@@ -73,7 +125,9 @@ export class CompositionHelper {
+   public compositionupdate(ev: Pick<CompositionEvent, 'data'>): void {
+     this._compositionView.textContent = ev.data;
+     this.updateCompositionElements();
++    const generation = this._inputGeneration;
+     setTimeout(() => {
++      if (generation !== this._inputGeneration) { return; }
+       this._compositionPosition.end = this._textarea.value.length;
+     }, 0);
+   }
+@@ -83,6 +137,7 @@ export class CompositionHelper {
+    * the handler.
+    */
+   public compositionend(): void {
++    if (!this._isComposing) { return; }
+     this._finalizeComposition(true);
+   }
+ 
+@@ -110,7 +165,11 @@ export class CompositionHelper {
+     if (ev.keyCode === 229) {
+       // If the "composition character" is used but gets to this point it means a non-composition
+       // character (eg. numbers and punctuation) was pressed when the IME was active.
+-      this._handleAnyTextareaChanges();
++      // Gboard on Android corrects "hello thre" to "hello there": delete "re", then insert "ere"
++      // before either keyCode 229 timer runs. The oldValue replace diff sees only the final value:
++      // two callbacks emit the whole stale textarea then the suffix, missing the deletion.
++      // Browser input events own these non-composition edits so deletion precedes insertion.
++      if (!this._usesAndroidInputEvents) { this._handleAnyTextareaChanges(); }
+       return false;
+     }
+ 
+@@ -133,7 +192,7 @@ export class CompositionHelper {
+       // Cancel any delayed composition send requests and send the input immediately.
+       this._isSendingComposition = false;
+       const input = this._textarea.value.substring(this._compositionPosition.start, this._compositionPosition.end);
+-      this._coreService.triggerDataEvent(input, true);
++      this._coreService.triggerInputEvent({ kind: 'text', data: input });
+     } else {
+       // Make a deep copy of the composition position here as a new compositionstart event may
+       // fire before the setTimeout executes.
+@@ -151,7 +210,9 @@ export class CompositionHelper {
+       //   the character, a counter example being Korean where an ending consonsant can move to
+       //   the following character if the following input is a vowel.
+       this._isSendingComposition = true;
++      const generation = this._inputGeneration;
+       setTimeout(() => {
++        if (generation !== this._inputGeneration) { return; }
+         // Ensure that the input has not already been sent
+         if (this._isSendingComposition) {
+           this._isSendingComposition = false;
+@@ -170,7 +231,7 @@ export class CompositionHelper {
+             input = this._textarea.value.substring(currentCompositionPosition.start);
+           }
+           if (input.length > 0) {
+-            this._coreService.triggerDataEvent(input, true);
++            this._coreService.triggerInputEvent({ kind: 'text', data: input });
+           }
+         }
+       }, 0);
+@@ -185,7 +246,9 @@ export class CompositionHelper {
+    */
+   private _handleAnyTextareaChanges(): void {
+     const oldValue = this._textarea.value;
++    const generation = this._inputGeneration;
+     setTimeout(() => {
++      if (generation !== this._inputGeneration) { return; }
+       // Ignore if a composition has started since the timeout
+       if (!this._isComposing) {
+         const newValue = this._textarea.value;
+@@ -195,11 +258,11 @@ export class CompositionHelper {
+         this._dataAlreadySent = diff;
+ 
+         if (newValue.length > oldValue.length) {
+-          this._coreService.triggerDataEvent(diff, true);
++          this._coreService.triggerInputEvent({ kind: 'text', data: diff });
+         } else if (newValue.length < oldValue.length) {
+-          this._coreService.triggerDataEvent(`${C0.DEL}`, true);
++          this._coreService.triggerInputEvent({ kind: 'text', data: C0.DEL });
+         } else if ((newValue.length === oldValue.length) && (newValue !== oldValue)) {
+-          this._coreService.triggerDataEvent(newValue, true);
++          this._coreService.triggerInputEvent({ kind: 'text', data: newValue });
+         }
+ 
+       }
+@@ -242,7 +305,10 @@ export class CompositionHelper {
+     }
+ 
+     if (!dontRecurse) {
+-      setTimeout(() => this.updateCompositionElements(true), 0);
++      const generation = this._inputGeneration;
++      setTimeout(() => {
++        if (generation === this._inputGeneration) { this.updateCompositionElements(true); }
++      }, 0);
+     }
+   }
+ }
+diff --git a/src/browser/public/Terminal.ts b/src/browser/public/Terminal.ts
+index f6ec55d24..b06f9ad00 100644
+--- a/src/browser/public/Terminal.ts
++++ b/src/browser/public/Terminal.ts
+@@ -12,7 +12,7 @@ import { AddonManager } from 'common/public/AddonManager';
+ import { BufferNamespaceApi } from 'common/public/BufferNamespaceApi';
+ import { ParserApi } from 'common/public/ParserApi';
+ import { UnicodeApi } from 'common/public/UnicodeApi';
+-import { IBufferNamespace as IBufferNamespaceApi, IDecoration, IDecorationOptions, IDisposable, ILinkProvider, ILocalizableStrings, IMarker, IModes, IParser, ITerminalAddon, Terminal as ITerminalApi, ITerminalInitOnlyOptions, IUnicodeHandling } from '@xterm/xterm';
++import { IInputTransformEvent, IBufferNamespace as IBufferNamespaceApi, IDecoration, IDecorationOptions, IDisposable, ILinkProvider, ILocalizableStrings, IMarker, IModes, IParser, ITerminalAddon, Terminal as ITerminalApi, ITerminalInitOnlyOptions, IUnicodeHandling } from '@xterm/xterm';
+ import type { Event } from 'vs/base/common/event';
+ 
+ /**
+@@ -151,6 +151,17 @@ export class Terminal extends Disposable implements ITerminalApi {
+   public open(parent: HTMLElement): void {
+     this._core.open(parent);
+   }
++  public attachInputTransform(transform: (event: IInputTransformEvent) => string): IDisposable {
++    const coreService = this._core.coreService;
++    // Each attachment has its own identity, even when reusing the same callback.
++    const handler = (event: IInputTransformEvent): string => transform(event);
++    coreService.inputTransform = handler;
++    return { dispose: () => {
++      if (coreService.inputTransform === handler) {
++        coreService.inputTransform = undefined;
++      }
++    } };
++  }
+   public attachCustomKeyEventHandler(customKeyEventHandler: (event: KeyboardEvent) => boolean): void {
+     this._core.attachCustomKeyEventHandler(customKeyEventHandler);
+   }
+@@ -238,6 +249,9 @@ export class Terminal extends Disposable implements ITerminalApi {
+     this._verifyIntegers(start, end);
+     this._core.refresh(start, end);
+   }
++  public cancelPendingInput(): void {
++    this._core.cancelPendingInput();
++  }
+   public reset(): void {
+     this._core.reset();
+   }
+diff --git a/src/browser/tsconfig.json b/src/browser/tsconfig.json
+index d8f3a189a..da7ca3223 100644
+--- a/src/browser/tsconfig.json
++++ b/src/browser/tsconfig.json
+@@ -11,6 +11,7 @@
+     ],
+     "baseUrl": "..",
+     "paths": {
++      "@xterm/xterm": [ "../typings/xterm.d.ts" ],
+       "common/*": [ "./common/*" ],
+       "vs/*": [ "./vs/*" ]
+     }
+diff --git a/src/common/Platform.ts b/src/common/Platform.ts
+index 4102f20c0..3def0ae36 100644
+--- a/src/common/Platform.ts
++++ b/src/common/Platform.ts
+@@ -18,6 +18,7 @@ export const isNode = (typeof process !== 'undefined' && 'title' in (process as
+ const userAgent = (isNode) ? 'node' : navigator.userAgent;
+ const platform = (isNode) ? 'node' : navigator.platform;
+ 
++export const isAndroid = userAgent.includes('Android');
+ export const isFirefox = userAgent.includes('Firefox');
+ export const isLegacyEdge = userAgent.includes('Edge');
+ export const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent);
+diff --git a/src/common/TestUtils.test.ts b/src/common/TestUtils.test.ts
+index 70ff8fe64..9877797eb 100644
+--- a/src/common/TestUtils.test.ts
++++ b/src/common/TestUtils.test.ts
+@@ -11,7 +11,7 @@ import { IBufferSet, IBuffer } from 'common/buffer/Types';
+ import { BufferSet } from 'common/buffer/BufferSet';
+ import { IDecPrivateModes, ICoreMouseEvent, CoreMouseEventType, ICharset, IModes, IAttributeData, IOscLinkData, IDisposable } from 'common/Types';
+ import { UnicodeV6 } from 'common/input/UnicodeV6';
+-import { IDecorationOptions, IDecoration } from '@xterm/xterm';
++import { IInputTransformEvent, IDecorationOptions, IDecoration } from '@xterm/xterm';
+ import { Emitter, type Event } from 'vs/base/common/event';
+ 
+ export class MockBufferService implements IBufferService {
+@@ -87,6 +87,13 @@ export class MockCharsetService implements ICharsetService {
+ 
+ export class MockCoreService implements ICoreService {
+   public serviceBrand: any;
++  public inputTransform: ((event: IInputTransformEvent) => string) | undefined;
++  public transformInput(event: IInputTransformEvent): string {
++    return this.inputTransform ? this.inputTransform(event) : event.data;
++  }
++  public triggerInputEvent(event: IInputTransformEvent): void {
++    this.triggerDataEvent(this.transformInput(event), true);
++  }
+   public isCursorInitialized: boolean = true;
+   public isCursorHidden: boolean = false;
+   public isFocused: boolean = false;
+diff --git a/src/common/services/CoreService.ts b/src/common/services/CoreService.ts
+index 7b5f532d3..f0396ff94 100644
+--- a/src/common/services/CoreService.ts
++++ b/src/common/services/CoreService.ts
+@@ -3,6 +3,7 @@
+  * @license MIT
+  */
+ 
++import type { IInputTransformEvent } from '@xterm/xterm';
+ import { clone } from 'common/Clone';
+ import { Disposable } from 'vs/base/common/lifecycle';
+ import { IDecPrivateModes, IModes } from 'common/Types';
+@@ -28,6 +29,7 @@ const DEFAULT_DEC_PRIVATE_MODES: IDecPrivateModes = Object.freeze({
+ 
+ export class CoreService extends Disposable implements ICoreService {
+   public serviceBrand: any;
++  public inputTransform: ((event: IInputTransformEvent) => string) | undefined;
+ 
+   public isCursorInitialized: boolean = false;
+   public isCursorHidden: boolean = false;
+@@ -58,6 +60,26 @@ export class CoreService extends Disposable implements ICoreService {
+     this.decPrivateModes = clone(DEFAULT_DEC_PRIVATE_MODES);
+   }
+ 
++  public override dispose(): void {
++    this.inputTransform = undefined;
++    super.dispose();
++  }
++
++  public transformInput(event: IInputTransformEvent): string {
++    // Deferred IME sends must neither call application code nor emit after disposal.
++    if (this._store.isDisposed || this._optionsService.rawOptions.disableStdin || !event.data) {
++      return '';
++    }
++    return this.inputTransform ? this.inputTransform(event) : event.data;
++  }
++
++  public triggerInputEvent(event: IInputTransformEvent): void {
++    const data = this.transformInput(event);
++    if (data) {
++      this.triggerDataEvent(data, true);
++    }
++  }
++
+   public triggerDataEvent(data: string, wasUserInput: boolean = false): void {
+     // Prevents all events to pty process if stdin is disabled
+     if (this._optionsService.rawOptions.disableStdin) {
+diff --git a/src/common/services/Services.ts b/src/common/services/Services.ts
+index a2847f1b8..de8fb8c27 100644
+--- a/src/common/services/Services.ts
++++ b/src/common/services/Services.ts
+@@ -3,7 +3,7 @@
+  * @license MIT
+  */
+ 
+-import { IDecoration, IDecorationOptions, ILinkHandler, ILogger, IWindowsPty, type IOverviewRulerOptions } from '@xterm/xterm';
++import { IInputTransformEvent, IDecoration, IDecorationOptions, ILinkHandler, ILogger, IWindowsPty, type IOverviewRulerOptions } from '@xterm/xterm';
+ import { CoreMouseEncoding, CoreMouseEventType, CursorInactiveStyle, CursorStyle, IAttributeData, ICharset, IColor, ICoreMouseEvent, ICoreMouseProtocol, IDecPrivateModes, IDisposable, IModes, IOscLinkData, IWindowOptions } from 'common/Types';
+ import { IBuffer, IBufferSet } from 'common/buffer/Types';
+ import { createDecorator } from 'common/services/ServiceRegistry';
+@@ -75,6 +75,9 @@ export interface ICoreMouseService {
+ export const ICoreService = createDecorator<ICoreService>('CoreService');
+ export interface ICoreService {
+   serviceBrand: undefined;
++  inputTransform: ((event: IInputTransformEvent) => string) | undefined;
++  transformInput(event: IInputTransformEvent): string;
++  triggerInputEvent(event: IInputTransformEvent): void;
+ 
+   /**
+    * Initially the cursor will not be visible until the first time the terminal
+diff --git a/src/common/tsconfig.json b/src/common/tsconfig.json
+index e9b3673ab..1d973de3d 100644
+--- a/src/common/tsconfig.json
++++ b/src/common/tsconfig.json
+@@ -11,6 +11,7 @@
+     ],
+     "baseUrl": "..",
+     "paths": {
++      "@xterm/xterm": [ "../typings/xterm.d.ts" ],
+       "vs/*": [ "./vs/*" ]
+     }
+   },
+diff --git a/src/headless/tsconfig.json b/src/headless/tsconfig.json
+index ae518a7e4..4c0f6d3c1 100644
+--- a/src/headless/tsconfig.json
++++ b/src/headless/tsconfig.json
+@@ -12,6 +12,7 @@
+     ],
+     "baseUrl": "../",
+     "paths": {
++      "@xterm/xterm": [ "../typings/xterm.d.ts" ],
+       "common/*": [ "./common/*" ],
+       "vs/*": [ "./vs/*" ]
+     }
+diff --git a/src/vs/tsconfig.json b/src/vs/tsconfig.json
+index c45bc40cc..b075cf891 100644
+--- a/src/vs/tsconfig.json
++++ b/src/vs/tsconfig.json
+@@ -11,6 +11,7 @@
+ 		"useUnknownInCatchVariables": false,
+ 		"forceConsistentCasingInFileNames": true,
+ 		"paths": {
++      "@xterm/xterm": [ "../typings/xterm.d.ts" ],
+ 			"vs/*": [
+ 				"./vs/*"
+ 			],
+diff --git a/typings/xterm.d.ts b/typings/xterm.d.ts
+index 457f1612e..1cc9a25fc 100644
+--- a/typings/xterm.d.ts
++++ b/typings/xterm.d.ts
+@@ -20,6 +20,11 @@ declare module '@xterm/xterm' {
+    */
+   export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'off';
+ 
++  // Known-origin input at xterm's emission boundary, before onData.
++  export type IInputTransformEvent =
++    | { kind: 'key'; data: string; domEvent: KeyboardEvent }
++    | { kind: 'text' | 'paste'; data: string };
++
+   /**
+    * An object containing options for the terminal.
+    */
+@@ -1071,6 +1076,14 @@ declare module '@xterm/xterm' {
+      */
+     attachCustomKeyEventHandler(customKeyEventHandler: (event: KeyboardEvent) => boolean): void;
+ 
++    // Overmux extension: synchronously transform known-origin input before onData.
++    // Keys are already encoded; inspect domEvent to avoid applying native modifiers twice.
++    // Text includes IME commits; paste is CR-normalized but not yet bracketed.
++    // input(), protocol replies and mouse/wheel reports bypass this hook.
++    // Return '' to suppress input. disableStdin/disposal bypass the callback.
++    // Replaces the previous transform; disposal removes only this attachment.
++    attachInputTransform(transform: (event: IInputTransformEvent) => string): IDisposable;
++
+     /**
+      * Attaches a custom wheel event handler which is run before keys are
+      * processed, giving consumers of xterm.js control over whether to proceed
+@@ -1295,6 +1308,11 @@ declare module '@xterm/xterm' {
+      */
+     reset(): void;
+ 
++    // Discards pending composition/textarea commits and invalidates their scheduled callbacks.
++    // Keeps the same textarea and focus; does not retract emitted data or cancel future browser events.
++    // Hosts must call synchronously before changing input ownership. reset() also calls this.
++    cancelPendingInput(): void;
++
+     /**
+      * Loads an addon into this instance of xterm.js.
+      * @param addon The addon to load.
+diff --git a/test/playwright/TestUtils.ts b/test/playwright/TestUtils.ts
+index 271b0393d..7ba79aab2 100644
+--- a/test/playwright/TestUtils.ts
++++ b/test/playwright/TestUtils.ts
+@@ -123,6 +123,8 @@ type TerminalProxyCustomOverrides = 'buffer' | (
+   'parser' |
+   'options' |
+   'open' |
++  'attachInputTransform' |
++  'cancelPendingInput' |
+   'attachCustomKeyEventHandler' |
+   'attachCustomWheelEventHandler' |
+   'registerLinkProvider' |
+diff --git a/test/playwright/tsconfig.json b/test/playwright/tsconfig.json
+index 3bef7ec7d..2f8bd032a 100644
+--- a/test/playwright/tsconfig.json
++++ b/test/playwright/tsconfig.json
+@@ -17,6 +17,7 @@
+     "declaration": true,
+     "baseUrl": ".",
+     "paths": {
++      "@xterm/xterm": [ "../../typings/xterm.d.ts" ],
+       "browser/*": [
+         "../../src/browser/*"
+       ],

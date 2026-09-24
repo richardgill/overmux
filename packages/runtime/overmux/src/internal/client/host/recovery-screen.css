@@ -1,0 +1,75 @@
+@layer om.components {
+  @scope ([data-om-recovery]) {
+    :where([data-om-recovery-reload]) {
+      min-block-size: 2.75rem;
+      border: 1px solid var(--om-color-border, var(--_om-color-border));
+      border-radius: var(--om-radius, 0.5rem);
+      color: inherit;
+      background: var(--om-color-surface, var(--_om-color-surface));
+      font: inherit;
+      transition:
+        background-color var(--om-motion-duration, 120ms) ease,
+        border-color var(--om-motion-duration, 120ms) ease;
+    }
+    :where([data-om-recovery-reload]):focus-visible {
+      outline: 2px solid var(--om-color-accent, var(--_om-color-accent));
+      outline-offset: 2px;
+      box-shadow: var(
+        --om-focus-ring,
+        0 0 0 3px color-mix(in srgb, var(--_om-color-accent) 24%, transparent)
+      );
+    }
+    :where(:scope) {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      overflow: auto;
+      place-items: center;
+      padding: calc(var(--om-spacing, 1rem) * 2);
+      color: var(--om-color-fg, var(--_om-color-fg));
+      background: var(--om-color-canvas, var(--_om-color-canvas));
+    }
+    :where([data-om-recovery-panel]) {
+      inline-size: min(100%, 36rem);
+      padding: calc(var(--om-spacing, 0.75rem) * 2);
+      border: 1px solid var(--om-color-border, var(--_om-color-border));
+      border-radius: var(--om-radius, 0.5rem);
+      background: var(--om-color-panel, var(--_om-color-panel));
+      box-shadow: var(--om-elevation, 0 1rem 2rem rgb(0 0 0 / 20%));
+    }
+    :where([data-om-recovery-title]) {
+      margin: 0;
+      font-size: 1.125rem;
+    }
+    :where([data-om-recovery-error]) {
+      margin-block: 1rem 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: var(--om-color-danger, var(--_om-color-danger));
+      font-family: var(
+        --om-font-mono,
+        ui-monospace,
+        SFMono-Regular,
+        Consolas,
+        monospace
+      );
+      font-size: 0.875rem;
+    }
+    :where([data-om-recovery-reload]) {
+      margin-block-start: 1rem;
+      padding-inline: 0.75rem;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :where([data-om-recovery-reload]) {
+        scroll-behavior: auto;
+        transition-duration: 0.01ms;
+      }
+    }
+    @media (forced-colors: active) {
+      :where([data-om-recovery-reload]):focus-visible {
+        outline-color: Highlight;
+        box-shadow: none;
+      }
+    }
+  }
+}

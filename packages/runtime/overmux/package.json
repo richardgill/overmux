@@ -1,0 +1,92 @@
+{
+  "name": "overmux",
+  "version": "0.0.6",
+  "license": "MIT",
+  "homepage": "https://github.com/richardgill/overmux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/runtime/overmux"
+  },
+  "type": "module",
+  "bin": {
+    "overmux": "./dist/bin.js"
+  },
+  "imports": {
+    "#server-child": "./dist/internal/server/coordinator/server-child.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
+    },
+    "./client": {
+      "types": "./dist/exports/client.d.ts",
+      "import": "./dist/exports/client.js"
+    },
+    "./server": {
+      "types": "./dist/exports/server.d.ts",
+      "import": "./dist/exports/server.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node ../../../scripts/generate-ai-context-docs.ts && rm -rf dist && vite build && vite build --config vite.auth.config.ts && vp pack && node scripts/clean-declarations.ts && node scripts/add-client-styles.mjs && cp -R docs dist/docs",
+    "dev": "pnpm run dev:cli",
+    "dev:cli": "node --import jiti/register src/internal/cli/bin.ts serve",
+    "serve": "node dist/bin.js serve",
+    "test": "vitest run",
+    "test:e2e": "node --import jiti/register scripts/run-playwright.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@overmux/keybindings": "workspace:*",
+    "@stricli/core": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@vercel/detect-agent": "catalog:",
+    "ci-info": "catalog:",
+    "es-module-lexer": "catalog:",
+    "hono": "catalog:",
+    "httpxy": "catalog:",
+    "jiti": "catalog:",
+    "typescript": "catalog:",
+    "web-push": "catalog:",
+    "ws": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/ai-context": "workspace:*",
+    "@overmux/lib": "workspace:*",
+    "@overmux/shared": "workspace:*",
+    "@overmux/tsconfig": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/web-push": "catalog:",
+    "@types/ws": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^8.2.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

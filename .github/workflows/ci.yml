@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changesets:
+    name: Changesets
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/shared
+      - run: pnpm check-changesets
+        env:
+          CHANGESET_BASE_REF: origin/${{ github.base_ref }}
+
+  check-and-typecheck:
+    name: Check + Typecheck
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - name: Check
+        id: check
+        run: pnpm check
+      - name: Typecheck
+        if: ${{ !cancelled() && (steps.check.outcome == 'success' || steps.check.outcome == 'failure') }}
+        run: pnpm typecheck
+
+  checks:
+    name: ${{ matrix.name }}
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Test
+            command: pnpm test
+          - name: Build
+            command: pnpm build
+          - name: Zellij plugin
+            command: pnpm --filter @overmux/zellij check-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - run: ${{ matrix.command }}
+
+  e2e:
+    name: Playwright
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - run: pnpm --filter overmux exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

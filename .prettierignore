@@ -1,0 +1,8 @@
+apps/www/src/routeTree.gen.ts
+coverage
+dist
+node_modules
+overlay
+pnpm-lock.yaml
+test-results
+**/tsconfig.json

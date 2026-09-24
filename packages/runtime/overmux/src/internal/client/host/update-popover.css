@@ -1,0 +1,82 @@
+@layer om.components {
+  @scope (
+    [data-om-reconnecting],
+    [data-om-restarting],
+    [data-om-update]
+  ) {
+    :where(:scope[data-om-reconnecting]) {
+      position: fixed;
+      inset: 0;
+      z-index: 1002;
+      display: grid;
+      place-items: center;
+      padding: calc(var(--om-spacing, 1rem) * 2);
+      color: var(--om-color-fg, var(--_om-color-fg));
+      background: var(--om-color-canvas, var(--_om-color-canvas));
+    }
+    :where([data-om-reconnecting-panel]) {
+      inline-size: min(100%, 24rem);
+      padding: calc(var(--om-spacing, 0.75rem) * 2);
+      border: 1px solid var(--om-color-border, var(--_om-color-border));
+      border-radius: var(--om-radius, 0.5rem);
+      background: var(--om-color-panel, var(--_om-color-panel));
+      box-shadow: var(--om-elevation, 0 1rem 2rem rgb(0 0 0 / 20%));
+      text-align: center;
+    }
+    :where([data-om-reconnecting-title]) {
+      margin: 0;
+      font-size: 1.125rem;
+    }
+    :where([data-om-reconnecting-message]) {
+      margin-block: 0.5rem 0;
+      color: var(--om-color-muted, var(--_om-color-muted));
+    }
+    :where(:scope[data-om-update]) {
+      position: fixed;
+      inset-block-end: 0.75rem;
+      inset-inline-end: 0.75rem;
+      z-index: 1001;
+      inline-size: min(calc(100% - 1.5rem), 32rem);
+      padding: var(--om-spacing, 0.75rem);
+      border: 1px solid var(--om-color-border, var(--_om-color-border));
+      border-radius: var(--om-radius, 0.5rem);
+      background: var(--om-color-panel, var(--_om-color-panel));
+      box-shadow: var(--om-elevation, 0 0.75rem 2rem rgb(0 0 0 / 30%));
+    }
+    :where([data-om-update] p) {
+      margin: 0 0 0.75rem;
+    }
+    :where([data-om-update-reload]) {
+      min-block-size: 2.75rem;
+      padding-inline: 0.75rem;
+      border: 1px solid var(--om-color-border, var(--_om-color-border));
+      border-radius: var(--om-radius, 0.5rem);
+      color: inherit;
+      background: var(--om-color-surface, var(--_om-color-surface));
+      font: inherit;
+    }
+    :where([data-om-update-error]) {
+      margin-block: 0.75rem 0;
+      color: var(--om-color-danger, var(--_om-color-danger));
+    }
+    :where(:scope[data-om-restarting]) {
+      position: fixed;
+      inset: 0;
+      z-index: 1003;
+      display: grid;
+      place-items: center;
+      color: var(--om-color-fg, var(--_om-color-fg));
+      background: var(--om-color-canvas, var(--_om-color-canvas));
+    }
+    :where([data-om-restarting-panel]) {
+      text-align: center;
+    }
+    :where([data-om-restarting-title]) {
+      margin: 0;
+      font-size: 1.125rem;
+    }
+    :where([data-om-restarting-message]) {
+      color: var(--om-color-muted, var(--_om-color-muted));
+    }
+  }
+}

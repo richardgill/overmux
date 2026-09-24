@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  create-release-pr:
+    name: Create Release PR
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_sha == github.sha &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: namespace-profile-overmux
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    outputs:
+      should_publish: ${{ steps.changesets.outputs.hasChangesets == 'false' }}
+      release_commit: ${{ steps.source.outputs.release_commit }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: ./.github/shared
+
+      - name: Resolve CI-verified release source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/desktop/scripts/desktop-release.ts resolve-main
+
+      - name: Create Release Pull Request
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          title: "chore: release"
+          commit: "chore: release"
+          version: pnpm run changeset-version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish packages
+    needs: create-release-pr
+    if: needs.create-release-pr.outputs.should_publish == 'true'
+    runs-on: namespace-profile-overmux
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release-pr.outputs.release_commit }}
+          fetch-depth: 0
+
+      - uses: ./.github/shared
+
+      - name: Install trusted-publishing npm CLI
+        run: npm install --global npm@11.6.2
+
+      - name: Verify Zellij plugin artifact
+        run: pnpm --filter @overmux/zellij build-plugin --check
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Publish packages
+        run: pnpm run changeset-publish
+
+  desktop-eligibility:
+    name: Detect desktop release
+    needs: create-release-pr
+    if: needs.create-release-pr.outputs.should_publish == 'true'
+    runs-on: namespace-profile-overmux
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      should_release: ${{ steps.desktop.outputs.should_release }}
+      release_commit: ${{ steps.desktop.outputs.release_commit }}
+      release_tag: ${{ steps.desktop.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release-pr.outputs.release_commit }}
+          fetch-depth: 0
+      - uses: ./.github/shared
+      - name: Detect unpublished desktop version
+        id: desktop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/desktop/scripts/desktop-release.ts detect
+
+  desktop:
+    name: Release desktop
+    needs: desktop-eligibility
+    if: needs.desktop-eligibility.outputs.should_release == 'true'
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      release_commit: ${{ needs.desktop-eligibility.outputs.release_commit }}
+      release_tag: ${{ needs.desktop-eligibility.outputs.release_tag }}

@@ -1,0 +1,44 @@
+{
+  "name": "@overmux/keybindings",
+  "version": "0.0.4",
+  "license": "MIT",
+  "description": "Shared browser keyboard binding utilities for Overmux",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/keybindings",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/keybindings"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vp pack",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "vitest": "catalog:"
+  }
+}

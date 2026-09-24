@@ -1,0 +1,122 @@
+name: Deploy WWW
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deployment action
+        required: true
+        type: choice
+        options:
+          - main
+          - preview
+          - destroy-preview
+      branch:
+        description: Branch name for a manual preview
+        required: false
+        type: string
+      pr-number:
+        description: PR number for a manual preview or cleanup
+        required: false
+        type: string
+      git-sha:
+        description: Git SHA (defaults to the selected workflow ref)
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-www-${{ (github.event_name == 'push' || inputs.action == 'main') && 'main' || inputs.pr-number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  main:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.action == 'main')
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 20
+    environment:
+      name: www-main
+      url: https://overmux.com
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DEPLOYMENT_KIND: main
+      DEPLOY_MESSAGE: Deploy ${{ inputs.git-sha || github.sha }} to main
+      GIT_SHA: ${{ inputs.git-sha || github.sha }}
+      PUBLIC_POSTHOG_KEY: ${{ vars.PUBLIC_POSTHOG_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - name: Prepare deployment
+        run: pnpm --filter @overmux/infra github-deployment prepare-main
+      - run: pnpm --filter @overmux/infra run deploy --stage main --yes
+      - name: Publish URL
+        run: pnpm --filter @overmux/infra github-deployment publish-main
+
+  preview:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'preview')
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 20
+    environment:
+      name: www-pr-${{ inputs.pr-number || github.event.pull_request.number }}
+      url: ${{ steps.preview-url.outputs.url }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PUBLIC_POSTHOG_KEY: ${{ vars.STAGING_PUBLIC_POSTHOG_KEY }}
+      WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN || 'richardgill88' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - name: Prepare preview deployment
+        env:
+          INPUT_BRANCH: ${{ inputs.branch || github.event.pull_request.head.ref }}
+          INPUT_PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number }}
+          INPUT_SHA: ${{ inputs.git-sha || github.event.pull_request.head.sha || github.sha }}
+        run: pnpm --filter @overmux/infra github-deployment prepare-preview
+      - run: pnpm --filter @overmux/infra run deploy --stage "$PREVIEW_STAGE" --yes
+      - id: preview-url
+        name: Publish preview URL
+        run: pnpm --filter @overmux/infra github-deployment publish-preview
+
+  cleanup:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'destroy-preview')
+    runs-on: namespace-profile-overmux
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DEPLOYMENT_KIND: preview
+      DESTROYING: true
+      GIT_SHA: ${{ inputs.git-sha || github.event.pull_request.head.sha || github.sha }}
+      PR_BRANCH: ${{ inputs.branch || github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/shared
+      - name: Prepare preview cleanup
+        env:
+          INPUT_PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number }}
+        run: pnpm --filter @overmux/infra github-deployment prepare-cleanup
+      - name: Destroy preview stage
+        run: pnpm --filter @overmux/infra run destroy --stage "$PREVIEW_STAGE" --yes
+
+  fork-preview-skipped:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: namespace-profile-overmux
+    steps:
+      - run: echo "### Preview skipped - deployment secrets are not exposed to fork pull requests." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,70 @@
+{
+  "name": "@overmux/tmux",
+  "version": "0.0.6",
+  "license": "MIT",
+  "description": "Reusable tmux backend, state, operations, and terminal stream for Overmux",
+  "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/tmux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardgill/overmux",
+    "directory": "packages/ecosystem/tmux"
+  },
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/fixtures",
+    "!src/**/testing",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rm -rf dist && vp pack",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@overmux/pty": "workspace:*",
+    "@overmux/terminal-stream": "workspace:*",
+    "@overmux/xterm": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@overmux/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@overmux/xterm-fork": "workspace:*",
+    "happy-dom": "catalog:",
+    "overmux": "workspace:*",
+    "react-dom": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "overmux": "^0.0.6",
+    "react": "^19.0.0"
+  }
+}
