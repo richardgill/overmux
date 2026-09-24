@@ -1,5 +1,11 @@
 # @overmux/desktop
 
+## 0.0.5
+
+### Patch Changes
+
+- [#9](https://github.com/richardgill/overmux/pull/9) [`664a302`](https://github.com/richardgill/overmux/commit/664a3023f9c452f737b3430f3d93be4bcd8841e1) Thanks [@richardgill](https://github.com/richardgill)! - Rebuild the desktop release with corrected macOS keyboard test configuration, preserving production Option-key behavior.
+
 ## 0.0.4
 
 ### Patch Changes
