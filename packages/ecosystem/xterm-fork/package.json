@@ -1,7 +1,7 @@
 {
   "name": "@overmux/xterm-fork",
   "private": true,
-  "version": "6.0.0-overmux.1",
+  "version": "6.0.0-overmux.2",
   "description": "Overmux-maintained xterm.js with input transformation for keyboard, text and paste",
   "license": "MIT",
   "repository": {
