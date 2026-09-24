@@ -1,6 +1,6 @@
 {
   "name": "@overmux/tmux",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "MIT",
   "description": "Reusable tmux backend, state, operations, and terminal stream for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/tmux",
@@ -64,7 +64,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "overmux": "^0.0.6",
+    "overmux": "^0.0.7",
     "react": "^19.0.0"
   }
 }

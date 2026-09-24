@@ -1,6 +1,6 @@
 {
   "name": "@overmux/jsonl-store",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "description": "Durable server-side JSONL store primitive for Overmux plugins",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/jsonl-store",

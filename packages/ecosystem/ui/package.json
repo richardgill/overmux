@@ -1,6 +1,6 @@
 {
   "name": "@overmux/ui",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "license": "MIT",
   "description": "Reusable React UI helpers for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/ui",
