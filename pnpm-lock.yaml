@@ -153,6 +153,9 @@ catalogs:
     fumadocs-ui:
       specifier: 16.15.4
       version: 16.15.4
+    ghostty-web:
+      specifier: 0.4.0
+      version: 0.4.0
     happy-dom:
       specifier: 20.11.6
       version: 20.11.6
@@ -442,6 +445,34 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10)(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/ecosystem/ghostty:
+    dependencies:
+      ghostty-web:
+        specifier: 'catalog:'
+        version: 0.4.0
+    devDependencies:
+      '@overmux/tsconfig':
+        specifier: workspace:*
+        version: link:../../../tooling/tsconfig
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.17)
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.11.6
+      react:
+        specifier: 'catalog:'
+        version: 19.2.3
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.3(react@19.2.3)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/ecosystem/git:
     dependencies:
       '@overmux/ui':
@@ -606,6 +637,9 @@ importers:
 
   packages/ecosystem/tmux:
     dependencies:
+      '@overmux/ghostty':
+        specifier: workspace:*
+        version: link:../ghostty
       '@overmux/pty':
         specifier: workspace:*
         version: link:../pty
@@ -5846,6 +5880,9 @@ packages:
 
   get-tsconfig@4.14.0:
     resolution: {integrity: sha512-yTb+8DXzDREzgvYmh6s9vHsSVCHeC0G3PI5bEXNBHtmshPnO+S5O7qgLEOn0I5QvMy6kpZN8K1NKGyilLb93wA==}
+
+  ghostty-web@0.4.0:
+    resolution: {integrity: sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==}
 
   github-slugger@2.0.0:
     resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
@@ -13111,6 +13148,8 @@ snapshots:
   get-tsconfig@4.14.0:
     dependencies:
       resolve-pkg-maps: 1.0.0
+
+  ghostty-web@0.4.0: {}
 
   github-slugger@2.0.0: {}
 

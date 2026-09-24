@@ -53,6 +53,7 @@ catalog:
   esbuild: 0.27.7
   fumadocs-core: 16.15.4
   fumadocs-ui: 16.15.4
+  ghostty-web: 0.4.0
   happy-dom: 20.11.6
   hono: 4.12.23
   httpxy: 0.5.5

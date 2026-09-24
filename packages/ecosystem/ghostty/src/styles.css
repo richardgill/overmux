@@ -1,0 +1,18 @@
+@layer om.components {
+  :where([data-om-ghostty-terminal]) {
+    display: flex;
+    min-block-size: 0;
+    min-inline-size: 0;
+    flex: 1 1 auto;
+  }
+
+  :where([data-om-ghostty-terminal] .om-ghostty-terminal-mount) {
+    min-block-size: 0;
+    min-inline-size: 0;
+    flex: 1 1 auto;
+  }
+
+  :where([data-om-ghostty-terminal] canvas) {
+    display: block;
+  }
+}
