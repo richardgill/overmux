@@ -1,8 +1,4 @@
-export {
-  ZellijXterm,
-  type ZellijXtermProps,
-  type ZellijXtermStyle,
-} from "./zellij-xterm";
+export { ZellijXterm, type ZellijXtermProps } from "./zellij-xterm";
 export {
   useZellijTerminal,
   type UseZellijTerminalOptions,

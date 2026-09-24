@@ -1,5 +1,3 @@
-import "./styles.css";
-
 import { useShortcutInputTarget } from "overmux/client";
 import {
   XtermTerminal,
@@ -7,33 +5,18 @@ import {
   type XtermTerminalProps,
 } from "@overmux/xterm/react";
 import {
-  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
-  type CSSProperties,
   type JSX,
-  type Ref,
 } from "react";
 
-import type {
-  ZellijTerminalConnection,
-  ZellijTerminalConnectionStatus,
-} from "../client/terminal-client";
-import { useZellijTerminal } from "./use-zellij-terminal";
+import type { UseZellijTerminalResult } from "./use-zellij-terminal";
 
-export type ZellijXtermStyle = CSSProperties &
-  Record<`--${string}`, string | number | undefined>;
-export type ZellijXtermProps = Omit<XtermTerminalProps, "ref"> & {
+export type ZellijXtermProps = Omit<XtermTerminalProps, "containerRef"> & {
   active?: boolean;
-  containerClassName?: string;
-  containerStyle?: ZellijXtermStyle;
-  onClose: () => Promise<void> | void;
-  onConnectionStatusChange?: (status: ZellijTerminalConnectionStatus) => void;
-  onError?: (error: Error) => void;
-  ref?: Ref<XtermTerminalHandle>;
-  stream: ZellijTerminalConnection;
+  terminal: UseZellijTerminalResult;
 };
 
 const binaryStringToBytes = (data: string): Uint8Array<ArrayBuffer> =>
@@ -41,13 +24,8 @@ const binaryStringToBytes = (data: string): Uint8Array<ArrayBuffer> =>
 
 export const ZellijXterm = ({
   active = true,
-  containerClassName,
-  containerStyle,
-  onClose,
-  onConnectionStatusChange,
-  onError,
   ref,
-  stream,
+  terminal,
   ...xtermProps
 }: ZellijXtermProps): JSX.Element => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,12 +53,10 @@ export const ZellijXterm = ({
     }),
     [],
   );
-  const { input, resize } = useZellijTerminal({
-    onConnectionStatusChange,
-    onError,
-    renderer,
-    stream,
-  });
+  const { attachRenderer, input, resize } = terminal;
+  // XtermTerminal creates xterm in a child passive effect. Attaching in a layout
+  // effect would flush buffered writes before xterm exists and lose their callbacks.
+  useEffect(() => attachRenderer(renderer), [attachRenderer, renderer]);
   const sendInputIfActive = (data: Parameters<typeof input>[0]) => {
     if (active) {
       input(data);
@@ -107,36 +83,17 @@ export const ZellijXterm = ({
       xtermRef.current?.focus();
     }
   }, [active]);
-  const close = useCallback(() => void onClose(), [onClose]);
 
   return (
-    <div
-      className={containerClassName}
-      data-om-zellij-terminal
-      ref={containerRef}
-      style={containerStyle}
-    >
-      <XtermTerminal
-        {...xtermProps}
-        onBinary={handleBinary}
-        onData={handleData}
-        onInputChange={handleInputChange}
-        onResize={handleResize}
-        ref={xtermRef}
-      />
-      {stream.error ? (
-        <div className="om-zellij-terminal-error" role="alert">
-          {stream.error.message}
-        </div>
-      ) : null}
-      <button
-        aria-label="Close terminal"
-        className="om-zellij-terminal-close"
-        onClick={close}
-        type="button"
-      >
-        Close
-      </button>
-    </div>
+    <XtermTerminal
+      {...xtermProps}
+      containerRef={containerRef}
+      options={{ scrollback: 0, ...xtermProps.options }}
+      onBinary={handleBinary}
+      onData={handleData}
+      onInputChange={handleInputChange}
+      onResize={handleResize}
+      ref={xtermRef}
+    />
   );
 };

@@ -15,4 +15,38 @@ pnpm add @overmux/zellij
 pnpm exec overmux integration install zellij
 ```
 
-See the [package README](https://github.com/richardgill/overmux/tree/main/packages/ecosystem/zellij#readme) for server and browser setup.
+## Compose a terminal
+
+```tsx
+import { useZellijTerminal, ZellijXterm } from "@overmux/zellij/react";
+
+const terminal = useZellijTerminal({ stream });
+
+<ZellijXterm terminal={terminal} />;
+```
+
+Call the hook inside your view component. The hook owns connection cleanup; the application renders `terminal.error` and its own close button. Unmounting only `ZellijXterm` keeps the connection alive. Unmounting the hook owner closes that attached client, not the Zellij session. Local scrollback defaults to zero, with an explicit override through `options={{ scrollback: 1_000 }}`.
+
+Style the terminal through `className` and `style`; there is no additional Zellij wrapper or stylesheet import.
+
+### Renderer remount limitation
+
+**The connection survives renderer unmount, but the terminal state does not.** Unmounting `ZellijXterm` destroys xterm's screen, cursor/input modes, and partially parsed escape sequences. Only pending and future bytes reach a new renderer; already acknowledged output is not replayed. An update to one line may appear without earlier screen contents, or the screen may stay blank if no output is pending. A partial escape sequence can also be interpreted incorrectly after losing its prefix.
+
+Keep the component mounted when hiding a view, retaining its usable dimensions:
+
+```tsx
+<ZellijXterm
+  terminal={terminal}
+  active={visible}
+  style={{ visibility: visible ? "visible" : "hidden" }}
+/>
+```
+
+This keeps output processing and terminal state alive; `active={false}` gates input, not output or sizing. Avoid relying on a resize to repair a destroyed renderer: unchanged dimensions are ignored, and changed dimensions may resize shared panes without guaranteeing a repaint.
+
+In development, StrictMode can discard an xterm that already received buffered output and create an empty replacement. Not every fresh mount is affected; keeping the transport alive during effect replay is not screen-state preservation.
+
+Replacing the fixed stream creates a new PTY client and obtains fresh attachment output, but does not guarantee the previous client's tab/pane selection. Automatic renderer-state restoration is not implemented.
+
+See the [usage and API documentation](./index.md) for server setup, custom renderer attachment, and lifecycle details.
