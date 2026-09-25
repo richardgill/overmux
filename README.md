@@ -10,9 +10,9 @@ Extend your existing terminal setup with custom rich web interfaces for reviewin
 Main features:
 
 - Terminals with tmux + xterm.js plugins
-- Desktop application + mobile PWA
+- Desktop application + mobile PWA with notifications.
 - Git plugin: `git status` + `git diff` information
-- Plugins: npm package ecosystem
+- Plugins: npm package ecosystem (or build anything you want!)
 
 ## Demo
 
