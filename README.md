@@ -42,7 +42,7 @@ This future didn't _spark joy_ for me, so I built Overmux to embed my terminal i
 
 Overmux was inspired by a few projects I like:
 
-- [nvim](https://neovim.io/): configuration via code
+- [nvim](https://neovim.io/): configuration via code + plugins
 - [pi](https://pi.dev/): plugins as TypeScript npm modules
 - [vite](https://vite.dev/) + [tanstack](https://tanstack.com/) + [zod](https://zod.dev/) ❤️
 
