@@ -85,7 +85,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "vite": "^8.2.1",
-    "zod": "^4.6.5"
+    "zod": "catalog:peers"
   },
   "publishConfig": {
     "access": "public"

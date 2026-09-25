@@ -43,7 +43,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "zod": "^4.6.5"
+    "zod": "catalog:peers"
   },
   "devDependencies": {
     "@overmux/tsconfig": "workspace:*",
