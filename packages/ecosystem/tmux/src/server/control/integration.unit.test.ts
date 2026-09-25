@@ -1,12 +1,17 @@
 // Verifies the control client against isolated real tmux servers and native notifications.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it, test as testCases, vi } from "vitest";
 
 import { tmuxSocketArguments } from "../backend";
-import { createTmuxControlClient, type TmuxControlClient } from "./client";
+import { defineTmuxControlBackend } from "./backend";
+import {
+  createTmuxControlClient,
+  type TmuxControlClient,
+  type TmuxControlClientOptions,
+} from "./client";
 
 const execFileAsync = promisify(execFile);
 const activeServerSockets: string[] = [];
@@ -45,7 +50,9 @@ const restartTmuxServer = async (socket: string) => {
   await vi.waitFor(() => startTmuxServer(socket), { timeout: 2_000 });
 };
 
-const createIsolatedControlClient = async () => {
+const createIsolatedControlClient = async (
+  options: Pick<TmuxControlClientOptions, "processFactory"> = {},
+) => {
   const socket = `overmux-control-test-${randomUUID()}`;
   activeServerSockets.push(socket);
   await startTmuxServer(socket);
@@ -53,6 +60,7 @@ const createIsolatedControlClient = async () => {
     reconnectMaxDelayMs: 20,
     reconnectMinDelayMs: 5,
     socket,
+    ...options,
   });
   activeClients.push(client);
   return { client, socket };
@@ -60,6 +68,8 @@ const createIsolatedControlClient = async () => {
 
 const controlClientAttachment = async (socket: string) => {
   const { stdout } = await runTmux(socket, [
+    // This probe also needs UTF-8 to preserve its tab-delimited fields.
+    "-u",
     "list-clients",
     "-F",
     "#{client_pid}\t#{session_name}",
@@ -91,6 +101,61 @@ const cleanupIsolatedTmux = async () => {
 afterEach(cleanupIsolatedTmux);
 
 describe("real isolated tmux control client", () => {
+  testCases.each([
+    { name: "C locale", locale: { LC_ALL: "C", LC_CTYPE: "C", LANG: "C" } },
+    {
+      name: "unset locale",
+      locale: { LC_ALL: undefined, LC_CTYPE: undefined, LANG: undefined },
+    },
+    {
+      name: "C overriding UTF-8 locale",
+      locale: { LC_ALL: "C", LC_CTYPE: "en_US.UTF-8", LANG: "en_US.UTF-8" },
+    },
+  ])("discovers the full backend hierarchy with $name", async ({ locale }) => {
+    const { client, socket } = await createIsolatedControlClient({
+      processFactory: (args) =>
+        spawn("tmux", [...args], {
+          // Clear TMUX too: nested clients assume UTF-8 regardless of locale.
+          // Override all locale selectors only on the child so host settings cannot mask this case.
+          env: { ...process.env, ...locale, TMUX: undefined },
+          stdio: "pipe",
+        }),
+    });
+    await runTmux(socket, [
+      "rename-window",
+      "-t",
+      "control:0",
+      "discovery window",
+    ]);
+    const backend = defineTmuxControlBackend({
+      socket,
+      controlClientFactory: () => client,
+    });
+
+    const state = await backend.refresh();
+
+    expect(state).toMatchObject({
+      connected: true,
+      hierarchy: {
+        sessions: [
+          {
+            id: "$0",
+            name: "control",
+            activeWindowId: "@0",
+            windows: [
+              {
+                id: "@0",
+                name: "discovery window",
+                activePaneId: "%0",
+                panes: [{ id: "%0", index: 0 }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   testCases.each([
     { name: "whitespace", value: "spaces and\ttabs\nline two" },
     {
