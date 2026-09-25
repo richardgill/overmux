@@ -4,7 +4,8 @@
 
 Build your own development environment for you and your agents.
 
-**Experimental beta.** Come tinker! Expect rough edges and things to change.
+> [!NOTE]
+> **Experimental beta.** Come tinker! Expect rough edges and things to change.
 
 Extend your existing terminal setup with custom rich web interfaces for reviewing code, coordinating agents, and working from your phone.
 
