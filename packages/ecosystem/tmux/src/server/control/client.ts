@@ -247,6 +247,8 @@ export const createTmuxControlClient = (
       // the client instead and Overmux's disconnect lifecycle creates a fresh targetless attachment.
       child = createProcess([
         ...tmuxSocketArguments(options.socket),
+        // Non-UTF-8 clients replace format separators (including ASCII 0x1f) with underscores.
+        "-u",
         "-C",
         "attach-session",
         "-f",

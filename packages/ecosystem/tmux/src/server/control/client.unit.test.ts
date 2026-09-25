@@ -322,7 +322,15 @@ describe("persistent tmux control client", () => {
     client.subscribe(vi.fn());
 
     expect(spawnArguments).toEqual([
-      ["-L", "test", "-C", "attach-session", "-f", "no-output,ignore-size"],
+      [
+        "-L",
+        "test",
+        "-u",
+        "-C",
+        "attach-session",
+        "-f",
+        "no-output,ignore-size",
+      ],
     ]);
     processes[0]!.acceptAttachment();
     await client.close();
