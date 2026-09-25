@@ -1,12 +1,14 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -46,6 +48,7 @@ const createDependencies = ({
 } = {}) => {
   const calls: CommandCall[] = [];
   const output: string[] = [];
+  const installWorkspaces: string[] = [];
   const runCommand: InitDependencies["runCommand"] = vi.fn(
     (command, args, options) => {
       calls.push({ args, command });
@@ -74,6 +77,9 @@ const createDependencies = ({
             args.includes("pnpm") &&
             args.includes("install")))
       ) {
+        installWorkspaces.push(
+          readFileSync(resolve(options.cwd, "pnpm-workspace.yaml"), "utf8"),
+        );
         writeFileSync(
           resolve(options.cwd, "pnpm-lock.yaml"),
           "lockfileVersion: '9.0'\n",
@@ -89,12 +95,16 @@ const createDependencies = ({
     stderr: { write: () => true },
     stdout: { write: (text) => output.push(text) },
   };
-  return { calls, dependencies, output };
+  return { calls, dependencies, installWorkspaces, output };
 };
 
 beforeEach(() => {
   rmSync(testDirectory, { force: true, recursive: true });
   mkdirSync(testDirectory, { recursive: true });
+});
+
+afterEach(() => {
+  rmSync(testDirectory, { force: true, recursive: true });
 });
 
 describe("overmux init preflight", () => {
@@ -113,8 +123,10 @@ describe("overmux init preflight", () => {
 
   testCases.each([
     { pnpmVersion: "9.15.0", expected: "found 9.15.0" },
-    { pnpmVersion: "not-a-version", expected: "pnpm 10 or newer" },
-    { pnpmVersion: "absent", expected: "pnpm 10 or newer" },
+    { pnpmVersion: "10.0.0", expected: "found 10.0.0" },
+    { pnpmVersion: "10.4.1", expected: "found 10.4.1" },
+    { pnpmVersion: "not-a-version", expected: "pnpm 10.5.0 or newer" },
+    { pnpmVersion: "absent", expected: "pnpm 10.5.0 or newer" },
   ])("rejects pnpm $pnpmVersion", async ({ expected, pnpmVersion }) => {
     const { dependencies } = createDependencies({
       mise: "absent",
@@ -186,16 +198,7 @@ describe("overmux init scaffold", () => {
       ["mise", "--version"],
       ["mise", "doctor", "--json"],
       ["mise", "install", "node@22", "pnpm@10", "--yes"],
-      [
-        "mise",
-        "exec",
-        "node@22",
-        "pnpm@10",
-        "--",
-        "pnpm",
-        "install",
-        "--ignore-workspace",
-      ],
+      ["mise", "exec", "node@22", "pnpm@10", "--", "pnpm", "install"],
       [
         "mise",
         "exec",
@@ -220,24 +223,46 @@ describe("overmux init scaffold", () => {
     expect(calls.map(({ command, args }) => [command, ...args])).toEqual([
       ["mise", "--version"],
       ["pnpm", "--version"],
-      ["pnpm", "install", "--ignore-workspace"],
+      ["pnpm", "install"],
       ["pnpm", "exec", "overmux", "check", "--config", "./overmux.config.ts"],
     ]);
   });
 
-  it("fails without mutation when a target file exists", async () => {
-    mkdirSync(targetDirectory, { recursive: true });
-    const agentsPath = resolve(targetDirectory, "AGENTS.md");
-    writeFileSync(agentsPath, "keep me");
-    const { dependencies } = createDependencies();
-    await expect(initializeOvermux(dependencies)).rejects.toThrow(
-      "Refusing to overwrite existing files",
-    );
+  testCases.each([
+    { mise: "active", pnpmVersion: "10.33.0" },
+    { mise: "absent", pnpmVersion: "10.5.0" },
+    { mise: "absent", pnpmVersion: "10.33.0" },
+  ] as const)(
+    "writes the node-pty allowlist before install and preserves it (mise $mise, pnpm $pnpmVersion)",
+    async (toolchain) => {
+      const { dependencies, installWorkspaces } = createDependencies(toolchain);
 
-    expect(readFileSync(agentsPath, "utf8")).toBe("keep me");
-    expect(dependencies.runCommand).not.toHaveBeenCalled();
-    expect(dependencies.getLatestOvermuxVersion).not.toHaveBeenCalled();
-  });
+      await initializeOvermux(dependencies);
+
+      const workspace = "onlyBuiltDependencies:\n  - node-pty\n";
+      expect(installWorkspaces).toEqual([workspace]);
+      expect(
+        readFileSync(resolve(targetDirectory, "pnpm-workspace.yaml"), "utf8"),
+      ).toBe(workspace);
+    },
+  );
+
+  testCases.each(["AGENTS.md", "pnpm-workspace.yaml"])(
+    "fails without mutation when %s exists",
+    async (path) => {
+      mkdirSync(targetDirectory, { recursive: true });
+      const existingPath = resolve(targetDirectory, path);
+      writeFileSync(existingPath, "keep me");
+      const { dependencies } = createDependencies();
+      await expect(initializeOvermux(dependencies)).rejects.toThrow(
+        `Refusing to overwrite existing files:\n- ${path}`,
+      );
+
+      expect(readFileSync(existingPath, "utf8")).toBe("keep me");
+      expect(dependencies.runCommand).not.toHaveBeenCalled();
+      expect(dependencies.getLatestOvermuxVersion).not.toHaveBeenCalled();
+    },
+  );
 
   it("preserves unrelated files", async () => {
     mkdirSync(targetDirectory, { recursive: true });
@@ -259,7 +284,7 @@ describe("overmux init scaffold", () => {
         return commandMissing();
       }
       if (args[0] === "--version") {
-        return commandSucceeded("10.0.0");
+        return commandSucceeded("10.5.0");
       }
       return { ...commandSucceeded(), status: 1, stderr: "install failed" };
     });
@@ -268,5 +293,6 @@ describe("overmux init scaffold", () => {
     );
 
     expect(existsSync(targetDirectory)).toBe(false);
+    expect(readdirSync(testDirectory)).toEqual([]);
   });
 });

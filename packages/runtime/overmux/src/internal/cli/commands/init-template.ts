@@ -7,6 +7,7 @@ export const initScaffoldPaths = [
   "mise.toml",
   "package.json",
   "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   "overmux.config.ts",
   "src/server/index.ts",
   "src/ui/app.tsx",
@@ -65,6 +66,7 @@ pnpm = "10"
       }
     : {}),
   "package.json": packageJson(overmuxVersion),
+  "pnpm-workspace.yaml": "onlyBuiltDependencies:\n  - node-pty\n",
   "overmux.config.ts": `import { defineOvermuxConfig } from "overmux";
 
 import server from "./src/server/index";
