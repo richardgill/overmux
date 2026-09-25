@@ -2,7 +2,9 @@
 
 [overmux.com](https://overmux.com)
 
-A local or self-hosted web UI for tmux sessions, Pi agents, and Git workspaces.
+Build your own development environment using your terminal + a custom web experience.
+
+Keep your terminal workflows. Add custom interfaces for reviewing code, coordinating agents, and whatever you need next.
 
 ## License
 
