@@ -16,6 +16,12 @@ Main features:
 
 ## Demo: My Overmux
 
+## Get started
+
+[Get started with Overmux](https://overmux.com/docs/getting-started/install-and-run-overmux), then make it your own.
+
+To understand how the pieces fit together, read [How Overmux works](https://overmux.com/docs/introduction/how-overmux-works). Explore the [documentation](https://overmux.com/docs) for more.
+
 ## Why I Built Overmux
 
 As AI coding agents have improved my time has shifted from:
