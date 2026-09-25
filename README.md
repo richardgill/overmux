@@ -2,7 +2,7 @@
 
 [overmux.com](https://overmux.com)
 
-Build your own development environment using your terminal + a custom web experience.
+Build your own development environment for you and your agents. Extend your existing terminal setup with a custom rich web UI.
 
 **Experimental beta.** Come tinker! Expect rough edges and things to change.
 
