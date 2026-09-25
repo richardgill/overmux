@@ -8,6 +8,11 @@ Keep your terminal workflows. Add custom web interfaces for reviewing code, coor
 
 Use Overmux: On your desktop and on your phone.
 
+
+## Inspiration
+
+Coming soon.
+
 ## License
 
 [MIT](./LICENSE)
