@@ -2,11 +2,11 @@
 
 [overmux.com](https://overmux.com)
 
-Build your own development environment for you and your agents. Extend your existing terminal setup with a custom rich web UI.
+Build your own development environment for you and your agents.
 
 **Experimental beta.** Come tinker! Expect rough edges and things to change.
 
-Keep your terminal workflows. Add custom web interfaces for reviewing code, coordinating agents, mobile.
+Extend your existing terminal setup with custom rich web interfaces for reviewing code, coordinating agents, and working from your phone.
 
 Use Overmux: On your desktop and on your phone.
 
