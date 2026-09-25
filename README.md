@@ -34,14 +34,18 @@ To:
 
 I lived in a customized tmux setup. But kept noticing that that the terminal, for all it's glory, might not be the best place to build the experiences needed, especially for code review and mobile.
 
-Herdr (a TUI) and Orca (web based) offer a decent default experience. But they lack the customizability I love with the terminal and neovim. They use their own muxer implementations and dictate workflows.
+[Herdr](https://github.com/herdrdev/herdr) (a TUI) and [Orca](https://github.com/stablyai/orca) (web based) offer a decent default experience. But they lack the customizability I love with the terminal and neovim. They use their own muxer implementations and dictate workflows.
 
 This future doesn't _spark joy_ for me, so I built Overmux to embed my terminal in a Desktop webapp and build my own experience with a mix of tmux terminals + custom web uis.
 
 
-## Inspiration
+## Inspiration / Credits
 
-Overmux was inspired by a few 
+Overmux was inspired by a few projects I like:
+
+- [nvim](https://neovim.io/): configuration via code
+- [pi](https://pi.dev/): plugins as TypeScript npm modules
+- [vite](https://vite.dev/) + [tanstack](https://tanstack.com/) + [zod](https://zod.dev/) ❤️
 
 ## License
 
