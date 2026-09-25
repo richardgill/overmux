@@ -34,12 +34,13 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "zod": "catalog:"
+  "peerDependencies": {
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@overmux/tsconfig": "workspace:*",
     "@types/node": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

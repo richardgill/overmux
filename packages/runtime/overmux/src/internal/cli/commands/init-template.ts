@@ -31,6 +31,7 @@ const packageJson = (overmuxVersion: string) =>
         overmux: overmuxVersion,
         react: "^19.0.0",
         "react-dom": "^19.0.0",
+        zod: "^4.6.5",
       },
       devDependencies: {
         "@types/react": "^19.0.0",

@@ -8,6 +8,7 @@
     },
     "types": ["node", "vite/client"]
   },
+  "exclude": ["src/internal/testing/fixtures/zod-consumer.ts"],
   "include": [
     "scripts/**/*.ts",
     "src/**/*.ts",

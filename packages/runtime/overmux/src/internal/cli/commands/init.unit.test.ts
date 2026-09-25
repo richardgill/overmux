@@ -149,7 +149,7 @@ describe("overmux init scaffold", () => {
     );
     expect(packageDefinition).toMatchObject({
       name: "my-overmux",
-      dependencies: { overmux: "1.2.3" },
+      dependencies: { overmux: "1.2.3", zod: "^4.6.5" },
       scripts: {
         build: "vite build",
         check: "overmux check --config ./overmux.config.ts",

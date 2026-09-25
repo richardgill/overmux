@@ -220,8 +220,8 @@ catalogs:
       specifier: 8.21.3
       version: 8.21.3
     zod:
-      specifier: 4.4.3
-      version: 4.4.3
+      specifier: 4.6.5
+      version: 4.6.5
 
 packageExtensionsChecksum: sha256-DC/ehVmaOoaXxfvBIPnYhLr8ZOx7pzjlYTvz10C2xNA=
 
@@ -249,7 +249,7 @@ importers:
         version: 0.1.2
       '@earendil-works/pi-coding-agent':
         specifier: 'catalog:'
-        version: 0.84.2(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-tui':
         specifier: 'catalog:'
         version: 0.84.2
@@ -309,7 +309,7 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
 
   apps/desktop:
     dependencies:
@@ -364,7 +364,7 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
 
   apps/www:
     dependencies:
@@ -379,7 +379,7 @@ importers:
         version: 0.3.0(@content-collections/core@0.15.2(typescript@5.9.3))(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       '@fumadocs/content-collections':
         specifier: 'catalog:'
-        version: 1.3.0(@content-collections/core@0.15.2(typescript@5.9.3))(@content-collections/mdx@0.2.2(@content-collections/core@0.15.2(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3))
+        version: 1.3.0(@content-collections/core@0.15.2(typescript@5.9.3))(@content-collections/mdx@0.2.2(@content-collections/core@0.15.2(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5))
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -388,10 +388,10 @@ importers:
         version: 1.168.49(esbuild@0.27.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(rolldown@1.2.6)(rollup@4.63.0)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       fumadocs-core:
         specifier: 'catalog:'
-        version: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3)
+        version: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5)
       fumadocs-ui:
         specifier: 'catalog:'
-        version: 16.15.4(@types/mdx@2.0.14)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.3.2)
+        version: 16.15.4(@types/mdx@2.0.14)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.3.2)
       lucide-react:
         specifier: 'catalog:'
         version: 1.32.0(react@19.2.3)
@@ -406,7 +406,7 @@ importers:
         version: 19.2.3(react@19.2.3)
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -453,9 +453,6 @@ importers:
       '@pierre/trees':
         specifier: 'catalog:'
         version: 1.0.0-beta.6(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(shiki@4.4.3)
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -484,12 +481,11 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-
-  packages/ecosystem/jsonl-store:
-    dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
+
+  packages/ecosystem/jsonl-store:
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -500,12 +496,11 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-
-  packages/ecosystem/keybindings:
-    dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
+
+  packages/ecosystem/keybindings:
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -513,12 +508,15 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/ecosystem/pi:
     dependencies:
       '@earendil-works/pi-coding-agent':
         specifier: '*'
-        version: 0.84.2(ws@8.21.3)(zod@4.4.3)
+        version: 0.84.2(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-tui':
         specifier: '*'
         version: 0.84.2
@@ -527,7 +525,7 @@ importers:
         version: link:../git
       '@richardgill/pi-config':
         specifier: 0.0.8
-        version: 0.0.8(@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.4.3))(zod@4.4.3)
+        version: 0.0.8(@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.6.5))(zod@4.6.5)
       '@shikijs/langs':
         specifier: 'catalog:'
         version: 4.4.3
@@ -546,9 +544,6 @@ importers:
       shiki:
         specifier: 'catalog:'
         version: 4.4.3
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -571,6 +566,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/ecosystem/pty:
     dependencies:
@@ -589,10 +587,6 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/ecosystem/terminal-stream:
-    dependencies:
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -603,6 +597,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/ecosystem/tmux:
     dependencies:
@@ -618,9 +615,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.3
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -649,12 +643,11 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-
-  packages/ecosystem/ui:
-    dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
+
+  packages/ecosystem/ui:
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -677,6 +670,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/ecosystem/xterm:
     dependencies:
@@ -765,9 +761,6 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.3
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -793,6 +786,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/runtime/ai-context:
     devDependencies:
@@ -850,9 +846,6 @@ importers:
       ws:
         specifier: 'catalog:'
         version: 8.21.3
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@overmux/ai-context':
         specifier: workspace:*
@@ -896,6 +889,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10(@vitest/browser@4.1.10)(vitest@4.1.10))(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/runtime/shared:
     dependencies:
@@ -904,7 +900,7 @@ importers:
         version: 2.7.0
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
     devDependencies:
       '@overmux/ai-context':
         specifier: workspace:*
@@ -935,7 +931,7 @@ importers:
         version: 4.0.0-rc.112
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
     devDependencies:
       '@overmux/tsconfig':
         specifier: workspace:*
@@ -8230,8 +8226,8 @@ packages:
   zeptomatch@2.1.0:
     resolution: {integrity: sha512-KiGErG2J0G82LSpniV0CtIzjlJ10E04j02VOudJsPyPwNZgGnRKQy7I1R7GMyg/QswnE4l7ohSGrQbQbjXPPDA==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -8273,11 +8269,11 @@ snapshots:
 
   '@alchemy.run/node-utils@2.0.0-beta.74': {}
 
-  '@anthropic-ai/sdk@0.91.1(zod@4.4.3)':
+  '@anthropic-ai/sdk@0.91.1(zod@4.6.5)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.6.5
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:
@@ -9067,9 +9063,9 @@ snapshots:
       '@distilled.cloud/core': 1.0.0-rc.6(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
 
-  '@earendil-works/pi-agent-core@0.84.2(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-agent-core@0.84.2(ws@8.21.3)(zod@4.6.5)':
     dependencies:
-      '@earendil-works/pi-ai': 0.84.2(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-ai': 0.84.2(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-telemetry': 0.84.2
       diff: 8.0.4
       ignore: 7.0.5
@@ -9083,9 +9079,9 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.84.2(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.84.2(ws@8.21.3)(zod@4.6.5)':
     dependencies:
-      '@anthropic-ai/sdk': 0.91.1(zod@4.4.3)
+      '@anthropic-ai/sdk': 0.91.1(zod@4.6.5)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
       '@earendil-works/pi-telemetry': 0.84.2
       '@google/genai': 1.52.0
@@ -9093,7 +9089,7 @@ snapshots:
       '@smithy/node-http-handler': 4.7.3
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      openai: 6.40.0(ws@8.21.3)(zod@4.4.3)
+      openai: 6.40.0(ws@8.21.3)(zod@4.6.5)
       partial-json: 0.1.7
       typebox: 1.3.7
     transitivePeerDependencies:
@@ -9108,10 +9104,10 @@ snapshots:
     dependencies:
       '@earendil-works/pi-protocol': 0.84.2
 
-  '@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.4.3)':
+  '@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.6.5)':
     dependencies:
-      '@earendil-works/pi-agent-core': 0.84.2(ws@8.21.3)(zod@4.4.3)
-      '@earendil-works/pi-ai': 0.84.2(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-agent-core': 0.84.2(ws@8.21.3)(zod@4.6.5)
+      '@earendil-works/pi-ai': 0.84.2(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-client': 0.84.2
       '@earendil-works/pi-protocol': 0.84.2
       '@earendil-works/pi-tui': 0.84.2
@@ -9610,13 +9606,13 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.17
 
-  '@fumadocs/content-collections@1.3.0(@content-collections/core@0.15.2(typescript@5.9.3))(@content-collections/mdx@0.2.2(@content-collections/core@0.15.2(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3))':
+  '@fumadocs/content-collections@1.3.0(@content-collections/core@0.15.2(typescript@5.9.3))(@content-collections/mdx@0.2.2(@content-collections/core@0.15.2(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5))':
     dependencies:
       '@content-collections/core': 0.15.2(typescript@5.9.3)
       '@content-collections/mdx': 0.2.2(@content-collections/core@0.15.2(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      fumadocs-core: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3)
+      fumadocs-core: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5)
       unified: 11.0.5
-      zod: 4.4.3
+      zod: 4.6.5
 
   '@fumadocs/tailwind@0.1.1(tailwindcss@4.3.2)':
     optionalDependencies:
@@ -10891,12 +10887,12 @@ snapshots:
     dependencies:
       '@redis/client': 6.2.1(@opentelemetry/api@1.9.0)
 
-  '@richardgill/pi-config@0.0.8(@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.4.3))(zod@4.4.3)':
+  '@richardgill/pi-config@0.0.8(@earendil-works/pi-coding-agent@0.84.2(ws@8.21.3)(zod@4.6.5))(zod@4.6.5)':
     dependencies:
       jsonc-parser: 3.3.1
-      zod: 4.4.3
+      zod: 4.6.5
     optionalDependencies:
-      '@earendil-works/pi-coding-agent': 0.84.2(ws@8.21.3)(zod@4.4.3)
+      '@earendil-works/pi-coding-agent': 0.84.2(ws@8.21.3)(zod@4.6.5)
 
   '@rolldown/binding-android-arm-eabi@1.2.6':
     optional: true
@@ -11387,7 +11383,7 @@ snapshots:
       jiti: 2.7.0
       magic-string: 0.30.21
       prettier: 3.8.3
-      zod: 4.4.3
+      zod: 4.6.5
     transitivePeerDependencies:
       - supports-color
 
@@ -11401,7 +11397,7 @@ snapshots:
       '@tanstack/router-utils': 1.162.2
       chokidar: 5.0.0
       unplugin: 3.3.0(esbuild@0.27.7)(rolldown@1.2.6)(rollup@4.63.0)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-      zod: 4.4.3
+      zod: 4.6.5
     optionalDependencies:
       '@tanstack/react-router': 1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       vite: 8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
@@ -11458,7 +11454,7 @@ snapshots:
       ufo: 1.6.4
       vitefu: 1.1.3(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       xmlbuilder2: 4.0.3
-      zod: 4.4.3
+      zod: 4.6.5
     optionalDependencies:
       vite: 8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
     transitivePeerDependencies:
@@ -12989,7 +12985,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3):
+  fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5):
     dependencies:
       '@fumari/image-size': 0.1.0
       estree-util-value-to-estree: 3.5.0
@@ -13020,11 +13016,11 @@ snapshots:
       lucide-react: 1.32.0(react@19.2.3)
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
-      zod: 4.4.3
+      zod: 4.6.5
     transitivePeerDependencies:
       - supports-color
 
-  fumadocs-ui@16.15.4(@types/mdx@2.0.14)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.3.2):
+  fumadocs-ui@16.15.4(@types/mdx@2.0.14)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(fumadocs-core@16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.3.2):
     dependencies:
       '@fuma-translate/react': 1.0.2(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@fumadocs/tailwind': 0.1.1(tailwindcss@4.3.2)
@@ -13040,7 +13036,7 @@ snapshots:
       '@radix-ui/react-tabs': 1.1.21(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       class-variance-authority: 0.7.1
       cnfast: 0.1.0
-      fumadocs-core: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.4.3)
+      fumadocs-core: 16.15.4(@mdx-js/mdx@3.1.1)(@tanstack/react-router@1.170.32(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@types/estree-jsx@1.0.5)(@types/hast@3.0.5)(@types/mdast@4.0.4)(@types/react@19.2.17)(lucide-react@1.32.0(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5)
       lucide-react: 1.35.0(react@19.2.3)
       motion: 13.1.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       next-themes: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -13646,7 +13642,7 @@ snapshots:
       tinyglobby: 0.2.17
       unbash: 3.0.0
       yaml: 2.9.0
-      zod: 4.4.3
+      zod: 4.6.5
 
   lazy-val@1.0.5: {}
 
@@ -14546,10 +14542,10 @@ snapshots:
       regex: 6.1.0
       regex-recursion: 6.0.2
 
-  openai@6.40.0(ws@8.21.3)(zod@4.4.3):
+  openai@6.40.0(ws@8.21.3)(zod@4.6.5):
     optionalDependencies:
       ws: 8.21.3
-      zod: 4.4.3
+      zod: 4.6.5
 
   outdent@0.5.0: {}
 
@@ -16253,6 +16249,6 @@ snapshots:
       grammex: 3.1.13
       graphmatch: 1.1.1
 
-  zod@4.4.3: {}
+  zod@4.6.5: {}
 
   zwitch@2.0.4: {}
