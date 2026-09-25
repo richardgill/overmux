@@ -1,5 +1,17 @@
 # @overmux/zellij
 
+## 0.0.6
+
+### Patch Changes
+
+- [#15](https://github.com/richardgill/overmux/pull/15) [`ab776b6`](https://github.com/richardgill/overmux/commit/ab776b659a54877a82af52d2150c14942457839c) Thanks [@richardgill](https://github.com/richardgill)! - Use Zod 4.6.5 throughout the workspace and rebuild dependent packages. Packages exposing Zod schemas now share the application's installation through a ^4.6.5 peer dependency so public schemas remain type-compatible. Newly initialized applications explicitly depend on Zod ^4.6.5.
+
+- Updated dependencies [[`a73f207`](https://github.com/richardgill/overmux/commit/a73f20729477037e0d779c181e79d04d5c55af71), [`ab776b6`](https://github.com/richardgill/overmux/commit/ab776b659a54877a82af52d2150c14942457839c)]:
+  - overmux@0.0.8
+  - @overmux/pty@0.0.6
+  - @overmux/terminal-stream@0.0.6
+  - @overmux/xterm@0.0.8
+
 ## 0.0.5
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@overmux/pty",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "license": "MIT",
   "description": "Reusable server-side PTY process primitive for Overmux plugins",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/pty",

@@ -1,6 +1,6 @@
 {
   "name": "@overmux/git",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "license": "MIT",
   "description": "Authorized path-based Git resources and operations for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/git",
@@ -62,7 +62,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "overmux": "^0.0.7",
+    "overmux": "^0.0.8",
     "react": "^19.0.0",
     "zod": "catalog:peers"
   }

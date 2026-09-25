@@ -1,6 +1,6 @@
 {
   "name": "@overmux/terminal-stream",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "license": "MIT",
   "description": "Reusable ordered terminal transport primitives for Overmux integrations",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/terminal-stream",
