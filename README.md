@@ -14,7 +14,7 @@ Main features:
 - Git plugin: `git status` + `git diff` information
 - Plugins: npm package ecosystem
 
-## Demo: My Overmux
+## Demo
 
 ## Get started
 
