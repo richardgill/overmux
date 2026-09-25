@@ -2,7 +2,7 @@
   "name": "@overmux/git",
   "version": "0.0.8",
   "license": "MIT",
-  "description": "Authorized path-based Git resources and operations for Overmux",
+  "description": "Authorized read-only Git status and diff subscriptions for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/git",
   "repository": {
     "type": "git",
@@ -47,7 +47,9 @@
   "dependencies": {
     "@overmux/ui": "workspace:*",
     "@pierre/diffs": "catalog:",
-    "@pierre/trees": "catalog:"
+    "@pierre/trees": "catalog:",
+    "chokidar": "5.0.0",
+    "diff": "9.0.0"
   },
   "devDependencies": {
     "@overmux/tsconfig": "workspace:*",

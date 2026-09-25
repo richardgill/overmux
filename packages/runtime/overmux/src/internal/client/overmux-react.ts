@@ -127,13 +127,117 @@ const useCanonicalInput = (input: unknown) => {
   return useMemo(() => (key ? JSON.parse(key) : undefined), [key]);
 };
 
+// Query identity shares pending work across observers without retaining unused cache entries.
+const pendingResourceInvalidations = new WeakSet<object>();
+type ResourceQuery = {
+  queryClient: ReturnType<typeof useQueryClient>;
+  queryKey: readonly unknown[];
+};
+
+const invalidateResource = ({ queryClient, queryKey }: ResourceQuery) => {
+  const query = queryClient.getQueryCache().find({ exact: true, queryKey });
+  if (query && query.state.fetchStatus !== "idle") {
+    // TanStack coalesces initial-read invalidations into that same read. Queue a
+    // follow-up instead, without cancelling reads or overlooking same-turn changes.
+    pendingResourceInvalidations.add(query);
+    return;
+  }
+  if (query) {
+    pendingResourceInvalidations.delete(query);
+  }
+  void queryClient.invalidateQueries({ exact: true, queryKey });
+};
+
+const flushResourceInvalidation = ({
+  queryClient,
+  queryKey,
+}: ResourceQuery) => {
+  const query = queryClient.getQueryCache().find({ exact: true, queryKey });
+  if (!query || query.state.fetchStatus !== "idle") {
+    return;
+  }
+  // All observers see settlement. Consuming the shared flag before starting a read
+  // ensures their callbacks cannot keep triggering each other's follow-up reads.
+  if (pendingResourceInvalidations.delete(query)) {
+    void queryClient.invalidateQueries({ exact: true, queryKey });
+  }
+};
+
+const useResourceInvalidation = ({
+  queryKey,
+  skipped,
+}: {
+  queryKey: readonly [id: string, input: unknown];
+  skipped: boolean;
+}) => {
+  const [id, canonicalInput] = queryKey;
+  const { manifest, overmuxServerApi } = useRuntime();
+  const queryClient = useQueryClient();
+  const invalidate = useCallback(
+    () => invalidateResource({ queryClient, queryKey }),
+    [queryClient, queryKey],
+  );
+  useEffect(() => {
+    if (skipped) {
+      return;
+    }
+    let active = true;
+    const cache = queryClient.getQueryCache();
+    const observedQuery = cache.find({ exact: true, queryKey });
+    // Fast reads can enter and leave fetching between React renders. Observe cache
+    // settlement directly, then defer the follow-up outside TanStack's notification.
+    const unsubscribe = cache.subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        event.query === observedQuery &&
+        event.query.state.fetchStatus === "idle" &&
+        pendingResourceInvalidations.has(event.query)
+      ) {
+        queueMicrotask(() => {
+          if (active) {
+            flushResourceInvalidation({ queryClient, queryKey });
+          }
+        });
+      }
+    });
+    flushResourceInvalidation({ queryClient, queryKey });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [queryClient, queryKey, skipped]);
+  useEffect(() => {
+    if (skipped || !manifest.resources.includes(id)) {
+      return;
+    }
+    let active = true;
+    const unsubscribe = overmuxServerApi.subscribeResource({
+      id,
+      input: canonicalInput,
+      onError: () => active && invalidate(),
+      onInvalidate: () => active && invalidate(),
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [
+    manifest.resources,
+    canonicalInput,
+    id,
+    invalidate,
+    overmuxServerApi,
+    skipped,
+  ]);
+  return invalidate;
+};
+
 const useResourceById = <TOutput>(
   id: string,
   input: unknown,
   skipped: boolean,
 ): ResourceResult<TOutput> | undefined => {
-  const { manifest, overmuxServerApi } = useRuntime();
-  const queryClient = useQueryClient();
+  const { overmuxServerApi } = useRuntime();
   const canonicalInput = useCanonicalInput(input);
   const queryKey = useMemo(
     () => [id, canonicalInput] as const,
@@ -148,31 +252,7 @@ const useResourceById = <TOutput>(
       }) as Promise<TOutput>,
     queryKey,
   });
-  useEffect(
-    () =>
-      !skipped && manifest.resources.includes(id)
-        ? overmuxServerApi.subscribeResource({
-            id,
-            input: canonicalInput,
-            onError: () =>
-              void queryClient.invalidateQueries({ exact: true, queryKey }),
-            onInvalidate: () =>
-              void queryClient.invalidateQueries({ exact: true, queryKey }),
-          })
-        : undefined,
-    [
-      manifest.resources,
-      canonicalInput,
-      id,
-      overmuxServerApi,
-      queryClient,
-      queryKey,
-      skipped,
-    ],
-  );
-  const refetch = useCallback(() => {
-    void queryClient.invalidateQueries({ exact: true, queryKey });
-  }, [queryClient, queryKey]);
+  const refetch = useResourceInvalidation({ queryKey, skipped });
   if (skipped) {
     return undefined;
   }

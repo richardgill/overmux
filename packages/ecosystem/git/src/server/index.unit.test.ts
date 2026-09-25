@@ -1,778 +1,636 @@
 import { execFile } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
-import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-
 import {
-  defineGitRepositories,
-  gitOperationHandlers,
-  gitSourceControlResource,
-} from "./index";
-import { gitChangeKey, type GitChange, type GitSourceControl } from "../shared";
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import * as chokidar from "chokidar";
+import { afterEach, describe, expect, it, test as testCases, vi } from "vitest";
 
+import { gitDiffResource, gitStatusResource } from "./index";
+import { gitDiffSchema, gitStatusSchema, type GitComparison } from "../shared";
+
+vi.mock("chokidar", { spy: true });
+const watch = vi.mocked(chokidar.watch);
 const exec = promisify(execFile);
 const roots: string[] = [];
-const context = () => ({
+const disposers: (() => void | Promise<void>)[] = [];
+const testRoot = fileURLToPath(
+  new URL("../../../../../.test-tmp/", import.meta.url),
+);
+const context = (signal = new AbortController().signal) => ({
   instance: {
     getInstanceId: () => "test",
     getDeepLinkPrefix: () => "overmux://test",
   },
   invalidate: vi.fn(),
-  notifications: { send: async () => undefined },
-  signal: new AbortController().signal,
+  signal,
 });
 const git = (root: string, args: string[]) =>
   exec("git", ["-C", root, ...args], {
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+    },
   });
-
-const createRepository = async () => {
-  const root = await mkdtemp(join(tmpdir(), "overmux-git-"));
+const createRepository = async (committed = true) => {
+  await mkdir(testRoot, { recursive: true });
+  const root = await mkdtemp(join(testRoot, "git-"));
   roots.push(root);
   await git(root, ["init", "-b", "main"]);
   await git(root, ["config", "user.email", "test@example.com"]);
   await git(root, ["config", "user.name", "Overmux Test"]);
-  await writeFile(join(root, "file.txt"), "one\n");
-  await git(root, ["add", "file.txt"]);
-  await git(root, ["commit", "-m", "initial"]);
+  await git(root, ["config", "commit.gpgsign", "false"]);
+  if (committed) {
+    await writeFile(join(root, "file.txt"), "one\n");
+    await git(root, ["add", "file.txt"]);
+    await git(root, ["commit", "-m", "initial"]);
+  }
   return root;
 };
-
-const readSnapshot = async (
-  repositories: ReturnType<typeof defineGitRepositories>,
-  root: string,
-  comparison: "base" | "uncommitted" = "uncommitted",
+const indexToWorktree: GitComparison = {
+  base: { kind: "index" },
+  target: "workingTree",
+};
+const headToIndex: GitComparison = {
+  base: { kind: "commit", ref: "HEAD" },
+  target: "index",
+};
+const readStatus = (repoRoot: string) =>
+  gitStatusResource({ allowedRoots: [repoRoot] }).read({ repoRoot }, context());
+const readDiff = (
+  repoRoot: string,
+  file: string,
+  comparison = indexToWorktree,
 ) =>
-  gitSourceControlResource({ repositories }).read(
-    { comparison, path: root },
+  gitDiffResource({ allowedRoots: [repoRoot] }).read(
+    { repoRoot, file, comparison },
     context(),
   );
 
-const readPatch = ({
-  change,
-  changes,
-}: {
-  change: GitChange;
-  changes: GitSourceControl;
-}) => changes.diffs[gitChangeKey(change)];
-
-const changeFor = (changes: GitSourceControl, path: string, area?: string) => {
-  const change = changes.changes.find(
-    (candidate) =>
-      candidate.path === path &&
-      (area === undefined || ("area" in candidate && candidate.area === area)),
-  );
-  if (!change) {
-    throw new Error(`Missing Git change: ${path}`);
-  }
-  return change;
-};
-
+// Each test releases subscriptions before deleting repositories; otherwise the
+// deliberate deletion would itself generate live invalidations for later tests.
 afterEach(async () => {
+  await Promise.all(disposers.splice(0).map((dispose) => dispose()));
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
   );
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
   vi.unstubAllEnvs();
 });
 
-describe("git plugin", () => {
-  it("defaults watcher debounce to 75 ms and preserves overrides", () => {
-    expect(
-      defineGitRepositories({ allowedRoots: ["/tmp"] }).watchDebounceMs,
-    ).toBe(75);
-    expect(
-      defineGitRepositories({
-        allowedRoots: ["/tmp"],
-        watch: { debounceMs: 15 },
-      }).watchDebounceMs,
-    ).toBe(15);
-  });
+describe("public Git resources against real repositories", () => {
+  it("separates summaries from selected staged and working-tree contents", async () => {
+    const repoRoot = await createRepository();
+    await writeFile(join(repoRoot, "file.txt"), "two\r\n");
+    await git(repoRoot, ["add", "file.txt"]);
+    await writeFile(join(repoRoot, "file.txt"), "three");
+    await writeFile(join(repoRoot, "empty.txt"), "");
+    await writeFile(join(repoRoot, "binary"), Buffer.from([0, 1]));
+    await writeFile(join(repoRoot, ":(glob)*\tname\n.txt"), "literal\n");
 
-  it("authorizes paths and returns complete uncommitted and base snapshots", async () => {
-    const root = await createRepository();
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => base,
-    });
-    await writeFile(join(root, "file.txt"), "two\n");
-    await writeFile(join(root, "untracked.txt"), "new\n");
-
-    const uncommitted = await readSnapshot(repositories, root);
-    expect(uncommitted).toMatchObject({
+    const status = gitStatusSchema.parse(await readStatus(repoRoot));
+    expect(status).toEqual({
+      repoRoot,
+      branch: {
+        name: "main",
+        upstream: null,
+        ahead: 0,
+        behind: 0,
+        unborn: false,
+      },
       changes: expect.arrayContaining([
-        expect.objectContaining({
-          area: "unstaged",
-          deletions: 1,
-          insertions: 1,
+        { path: "file.txt", status: "modified", area: "staged", binary: false },
+        {
           path: "file.txt",
           status: "modified",
-        }),
-        expect.objectContaining({
           area: "unstaged",
-          deletions: 0,
-          insertions: 1,
-          path: "untracked.txt",
+          binary: false,
+        },
+        {
+          path: "empty.txt",
           status: "untracked",
-        }),
-      ]),
-      comparison: "uncommitted",
-      root,
-    });
-    await expect(
-      readPatch({
-        change: changeFor(uncommitted, "file.txt"),
-        changes: uncommitted,
-      }),
-    ).toMatchObject({
-      newContent: "two\n",
-      oldContent: "one\n",
-      patch: expect.stringContaining("+two"),
-      path: "file.txt",
-    });
-    await expect(
-      readPatch({
-        change: changeFor(uncommitted, "untracked.txt"),
-        changes: uncommitted,
-      }),
-    ).toMatchObject({
-      newContent: "new\n",
-      oldContent: null,
-      patch: expect.stringContaining("+new"),
-      path: "untracked.txt",
-    });
-    const baseChanges = await readSnapshot(repositories, root, "base");
-    expect(baseChanges).toMatchObject({
-      changes: expect.arrayContaining([
-        expect.objectContaining({ path: "file.txt", status: "modified" }),
-        expect.objectContaining({ path: "untracked.txt", status: "untracked" }),
-      ]),
-      comparison: "base",
-    });
-    await expect(
-      readPatch({
-        change: changeFor(baseChanges, "untracked.txt"),
-        changes: baseChanges,
-      }),
-    ).toMatchObject({
-      newContent: "new\n",
-      oldContent: null,
-      patch: expect.stringContaining("+new"),
-    });
-    const denied = await createRepository();
-    await expect(readSnapshot(repositories, denied)).rejects.toThrow(
-      "not authorized",
-    );
-  });
-
-  it("returns complete added and deleted file patches", async () => {
-    const root = await createRepository();
-    const repositories = defineGitRepositories({ allowedRoots: [root] });
-    await rm(join(root, "file.txt"));
-    await writeFile(join(root, "added.txt"), "added\n");
-    await git(root, ["add", "--all"]);
-
-    const changes = await readSnapshot(repositories, root);
-    expect(changes).toMatchObject({
-      changes: expect.arrayContaining([
-        expect.objectContaining({ path: "added.txt", status: "added" }),
-        expect.objectContaining({ path: "file.txt", status: "deleted" }),
-      ]),
-    });
-    await expect(
-      readPatch({
-        change: changeFor(changes, "added.txt"),
-        changes,
-      }),
-    ).toMatchObject({
-      newContent: "added\n",
-      oldContent: null,
-      patch: expect.stringContaining("@@ -0,0 +1 @@"),
-      path: "added.txt",
-    });
-    await expect(
-      readPatch({
-        change: changeFor(changes, "file.txt"),
-        changes,
-      }),
-    ).toMatchObject({
-      newContent: null,
-      oldContent: "one\n",
-      patch: expect.stringContaining("@@ -1 +0,0 @@"),
-      path: "file.txt",
-    });
-  });
-
-  it("compares the resolved base to mutable final worktree content", async () => {
-    const root = await createRepository();
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => base,
-    });
-    await writeFile(join(root, "committed.txt"), "committed\n");
-    await git(root, ["add", "committed.txt"]);
-    await git(root, ["commit", "-m", "committed change"]);
-    await writeFile(join(root, "file.txt"), "staged\n");
-    await git(root, ["add", "file.txt"]);
-    await writeFile(join(root, "file.txt"), "worktree\n");
-    await writeFile(join(root, "untracked.txt"), "untracked\n");
-
-    const before = await readSnapshot(repositories, root, "base");
-    expect(before.changes.map(({ path }) => path).sort()).toEqual([
-      "committed.txt",
-      "file.txt",
-      "untracked.txt",
-    ]);
-    expect(
-      before.changes.filter(({ path }) => path === "file.txt"),
-    ).toHaveLength(1);
-    expect(before.changes.every((change) => change.area === undefined)).toBe(
-      true,
-    );
-    await expect(
-      readPatch({
-        change: changeFor(before, "file.txt"),
-        changes: before,
-      }),
-    ).toMatchObject({
-      newContent: "worktree\n",
-      oldContent: "one\n",
-      patch: expect.stringContaining("+worktree"),
-    });
-
-    await writeFile(join(root, "file.txt"), "latest\n");
-    const after = await readSnapshot(repositories, root, "base");
-    expect(after.revision).not.toBe(before.revision);
-    await expect(
-      readPatch({
-        change: changeFor(after, "file.txt"),
-        changes: after,
-      }),
-    ).toMatchObject({ patch: expect.stringContaining("+latest") });
-  });
-
-  it("rejects outside paths before invoking Git and resolves file paths", async () => {
-    const root = await createRepository();
-    const outside = await mkdtemp(join(tmpdir(), "overmux-outside-"));
-    const bin = await mkdtemp(join(tmpdir(), "overmux-git-bin-"));
-    roots.push(outside, bin);
-    const marker = join(bin, "called");
-    const command = join(bin, "git");
-    await writeFile(command, `#!/bin/sh\ntouch ${marker}\nexit 1\n`);
-    await chmod(command, 0o755);
-    vi.stubEnv("PATH", bin);
-    const repositories = defineGitRepositories({ allowedRoots: [root] });
-
-    await expect(readSnapshot(repositories, outside)).rejects.toThrow(
-      "not authorized",
-    );
-    await expect(access(marker)).rejects.toThrow();
-    vi.unstubAllEnvs();
-    await expect(
-      readSnapshot(repositories, join(root, "file.txt")),
-    ).resolves.toMatchObject({ root });
-  });
-
-  it("stops its generation-owned watcher when the resource is disposed", async () => {
-    const root = await createRepository();
-    await mkdir(join(root, "nested"));
-    await writeFile(join(root, "nested", "tracked.txt"), "one\n");
-    await git(root, ["add", "nested/tracked.txt"]);
-    await git(root, ["commit", "-m", "nested"]);
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      watch: { debounceMs: 5 },
-    });
-    const changes = gitSourceControlResource({ repositories });
-    let invalidations = 0;
-    let resolveInvalidation: () => void = () => undefined;
-    const waitForInvalidation = () =>
-      new Promise<void>((resolve) => {
-        resolveInvalidation = resolve;
-      });
-    const ready = waitForInvalidation();
-    const dispose = changes.subscribe(
-      { comparison: "uncommitted", path: root },
-      () => {
-        invalidations += 1;
-        resolveInvalidation();
-      },
-      context(),
-    );
-    await ready;
-
-    const worktreeInvalidation = waitForInvalidation();
-    await writeFile(join(root, "nested", "tracked.txt"), "two\n");
-    await worktreeInvalidation;
-    const afterWorktree = invalidations;
-    const discoveredDirectory = waitForInvalidation();
-    await mkdir(join(root, "discovered"));
-    await writeFile(join(root, "discovered", "new.txt"), "one\n");
-    await discoveredDirectory;
-    await readSnapshot(repositories, root);
-    const nestedInvalidation = waitForInvalidation();
-    await writeFile(join(root, "discovered", "new.txt"), "two\n");
-    await nestedInvalidation;
-    const metadataInvalidation = waitForInvalidation();
-    await git(root, ["add", "nested/tracked.txt"]);
-    await git(root, ["update-ref", "refs/heads/watcher", "HEAD"]);
-    await metadataInvalidation;
-    expect(invalidations).toBeGreaterThan(afterWorktree);
-    dispose();
-    const afterDispose = invalidations;
-    await writeFile(join(root, "nested", "tracked.txt"), "three\n");
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(invalidations).toBe(afterDispose);
-  });
-
-  it("invalidates both stable comparison subscriptions from one watcher", async () => {
-    const root = await createRepository();
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => base,
-      watch: { debounceMs: 5 },
-    });
-    const sourceControl = gitSourceControlResource({ repositories });
-    const uncommittedInvalidated = vi.fn();
-    const baseInvalidated = vi.fn();
-    let ready: () => void = () => undefined;
-    const watcherReady = new Promise<void>((resolve) => {
-      ready = resolve;
-    });
-    const disposeUncommitted = sourceControl.subscribe(
-      { comparison: "uncommitted", path: root },
-      () => {
-        uncommittedInvalidated();
-        ready();
-      },
-      context(),
-    );
-    await watcherReady;
-    const disposeBase = sourceControl.subscribe(
-      { comparison: "base", path: root },
-      baseInvalidated,
-      context(),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    uncommittedInvalidated.mockClear();
-    baseInvalidated.mockClear();
-
-    await writeFile(join(root, "file.txt"), "three\n");
-    await vi.waitFor(() => {
-      expect(uncommittedInvalidated).toHaveBeenCalledOnce();
-      expect(baseInvalidated).toHaveBeenCalledOnce();
-    });
-    disposeUncommitted();
-    disposeBase();
-  });
-
-  it("distinguishes staged and unstaged patches and tracks binary files", async () => {
-    const root = await createRepository();
-    const repositories = defineGitRepositories({ allowedRoots: [root] });
-    await writeFile(join(root, "rename me.txt"), "rename\n");
-    await git(root, ["add", "rename me.txt"]);
-    await git(root, ["commit", "-m", "fixtures"]);
-    await writeFile(join(root, "space name.txt"), Buffer.from([0, 1, 2]));
-    await git(root, ["add", "space name.txt"]);
-    await git(root, ["mv", "rename me.txt", "renamed file.txt"]);
-    await writeFile(join(root, "file.txt"), "staged\n");
-    await git(root, ["add", "file.txt"]);
-    await writeFile(join(root, "file.txt"), "unstaged\n");
-
-    const changes = await readSnapshot(repositories, root);
-    expect(changes.changes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ binary: true, path: "space name.txt" }),
-        expect.objectContaining({
-          path: "renamed file.txt",
-          previousPath: "rename me.txt",
-          status: "renamed",
-        }),
-        expect.objectContaining({
-          area: "staged",
-          insertions: 1,
-          path: "file.txt",
-        }),
-        expect.objectContaining({
           area: "unstaged",
-          insertions: 1,
-          path: "file.txt",
-        }),
+          binary: false,
+        },
+        { path: "binary", status: "untracked", area: "unstaged", binary: true },
+      ]),
+    });
+    expect(
+      gitDiffSchema.parse(await readDiff(repoRoot, "file.txt", headToIndex)),
+    ).toMatchObject({ oldContent: "one\n", newContent: "two\r\n" });
+    expect(await readDiff(repoRoot, "file.txt")).toMatchObject({
+      oldContent: "two\r\n",
+      newContent: "three",
+    });
+    expect(await readDiff(repoRoot, "empty.txt")).toMatchObject({
+      oldContent: null,
+      newContent: "",
+      hunks: [],
+    });
+    expect(await readDiff(repoRoot, "binary")).toMatchObject({
+      binary: true,
+      oldContent: null,
+      newContent: null,
+      hunks: [],
+    });
+    expect(await readDiff(repoRoot, ":(glob)*\tname\n.txt")).toMatchObject({
+      oldContent: null,
+      newContent: "literal\n",
+    });
+    await rm(join(repoRoot, "file.txt"));
+    expect(await readDiff(repoRoot, "file.txt")).toMatchObject({
+      oldContent: "two\r\n",
+      newContent: null,
+    });
+    await git(repoRoot, ["add", "-u"]);
+    expect(await readDiff(repoRoot, "file.txt", headToIndex)).toMatchObject({
+      oldContent: "one\n",
+      newContent: null,
+    });
+    await expect(readDiff(repoRoot, "missing")).rejects.toThrow(
+      "absent on both sides",
+    );
+  });
+
+  it("treats a replaced parent directory as a missing working-tree side", async () => {
+    const repoRoot = await createRepository();
+    await mkdir(join(repoRoot, "directory"));
+    await writeFile(join(repoRoot, "directory", "child.txt"), "child\n");
+    await git(repoRoot, ["add", "directory"]);
+    await rm(join(repoRoot, "directory"), { recursive: true });
+    await writeFile(join(repoRoot, "directory"), "now a file\n");
+
+    expect(await readDiff(repoRoot, "directory/child.txt")).toMatchObject({
+      oldContent: "child\n",
+      newContent: null,
+    });
+  });
+
+  it("keeps summaries bounded and binary classification faithful", async () => {
+    const repoRoot = await createRepository();
+    await writeFile(join(repoRoot, "large"), "text");
+    await truncate(join(repoRoot, "large"), 20_000_000);
+    await writeFile(join(repoRoot, "utf8-boundary"), `${"a".repeat(8191)}é`);
+    await writeFile(join(repoRoot, "invalid-utf8"), Buffer.from([0xff]));
+
+    expect((await readStatus(repoRoot)).changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "large", binary: true }),
+        expect.objectContaining({ path: "utf8-boundary", binary: false }),
+        expect.objectContaining({ path: "invalid-utf8", binary: true }),
       ]),
     );
-    const binary = changeFor(changes, "space name.txt", "staged");
-    await expect(readPatch({ change: binary, changes })).toMatchObject({
+    await expect(readDiff(repoRoot, "large")).rejects.toThrow(
+      "exceeded 16000000 bytes",
+    );
+    expect(await readDiff(repoRoot, "invalid-utf8")).toMatchObject({
       binary: true,
-      newContent: null,
       oldContent: null,
-      patch: "",
+      newContent: null,
+      hunks: [],
     });
-    expect(Object.keys(changes.diffs)).toHaveLength(changes.changes.length);
+  });
 
-    await expect(
-      readPatch({
-        change: changeFor(changes, "file.txt", "staged"),
-        changes,
-      }),
-    ).toMatchObject({
-      newContent: "staged\n",
+  it("does not run external diff, textconv or filesystem-monitor helpers", async () => {
+    const repoRoot = await createRepository();
+    await writeFile(join(repoRoot, ".gitattributes"), "*.txt diff=unsafe\n");
+    await git(repoRoot, ["config", "diff.external", "/does-not-exist"]);
+    await git(repoRoot, ["config", "diff.unsafe.textconv", "/does-not-exist"]);
+    await git(repoRoot, ["config", "core.fsmonitor", "/does-not-exist"]);
+    await writeFile(join(repoRoot, "file.txt"), "changed\n");
+
+    expect((await readStatus(repoRoot)).changes).toContainEqual(
+      expect.objectContaining({ path: "file.txt" }),
+    );
+    expect(await readDiff(repoRoot, "file.txt")).toMatchObject({
       oldContent: "one\n",
-      patch: expect.stringContaining("+staged"),
+      newContent: "changed\n",
     });
+    const controller = new AbortController();
+    controller.abort();
     await expect(
-      readPatch({
-        change: changeFor(changes, "file.txt", "unstaged"),
-        changes,
-      }),
-    ).toMatchObject({
-      newContent: "unstaged\n",
-      oldContent: "staged\n",
-      patch: expect.stringContaining("+unstaged"),
-    });
-    await expect(
-      readPatch({
-        change: changeFor(changes, "renamed file.txt"),
-        changes,
-      }),
-    ).toMatchObject({
-      newContent: "rename\n",
-      oldContent: "rename\n",
-      patch: expect.stringMatching(
-        /diff --git a\/rename me\.txt b\/renamed file\.txt/,
+      gitStatusResource({ allowedRoots: [repoRoot] }).read(
+        { repoRoot },
+        context(controller.signal),
       ),
+    ).rejects.toThrow();
+  });
+
+  it("uses ordinary similarity-based renames independently for each comparison", async () => {
+    const repoRoot = await createRepository();
+    const original = Array.from(
+      { length: 20 },
+      (_, index) => `line ${index}\n`,
+    ).join("");
+    await writeFile(join(repoRoot, "file.txt"), original);
+    await git(repoRoot, ["commit", "-am", "longer"]);
+    await git(repoRoot, ["mv", "file.txt", "renamed.txt"]);
+    const staged = original.replace("line 5\n", "edited five\n");
+    await writeFile(join(repoRoot, "renamed.txt"), staged);
+    await git(repoRoot, ["add", "renamed.txt"]);
+    await writeFile(join(repoRoot, "renamed.txt"), `${staged}working\n`);
+
+    expect((await readStatus(repoRoot)).changes).toEqual([
+      {
+        path: "renamed.txt",
+        previousPath: "file.txt",
+        area: "staged",
+        status: "renamed",
+        binary: false,
+      },
+      {
+        path: "renamed.txt",
+        area: "unstaged",
+        status: "modified",
+        binary: false,
+      },
+    ]);
+    expect(await readDiff(repoRoot, "renamed.txt", headToIndex)).toMatchObject({
+      previousPath: "file.txt",
+      oldContent: original,
+      newContent: staged,
+    });
+    expect(await readDiff(repoRoot, "file.txt", headToIndex)).toMatchObject({
+      oldContent: original,
+      newContent: null,
+    });
+    const unstaged = await readDiff(repoRoot, "renamed.txt");
+    expect(unstaged).toMatchObject({
+      oldContent: staged,
+      newContent: `${staged}working\n`,
+    });
+    expect(unstaged.previousPath).toBeUndefined();
+    expect(
+      await readDiff(repoRoot, "renamed.txt", {
+        base: { kind: "commit", ref: "main" },
+        target: "workingTree",
+      }),
+    ).toMatchObject({
+      previousPath: "file.txt",
+      oldContent: original,
+      newContent: `${staged}working\n`,
     });
   });
 
-  it("returns rename stats and patches for uncommitted and base comparisons", async () => {
-    const root = await createRepository();
-    await writeFile(
-      join(root, "old name.txt"),
-      "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
-    );
-    await git(root, ["add", "old name.txt"]);
-    await git(root, ["commit", "-m", "rename fixture"]);
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => base,
+  it("handles unborn HEAD but never substitutes an empty base for other invalid refs", async () => {
+    const repoRoot = await createRepository(false);
+    await writeFile(join(repoRoot, "new.txt"), "new\n");
+    await git(repoRoot, ["add", "new.txt"]);
+    expect((await readStatus(repoRoot)).branch).toEqual({
+      name: "main",
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      unborn: true,
     });
-
-    await git(root, ["mv", "old name.txt", "new name.txt"]);
-    await writeFile(
-      join(root, "new name.txt"),
-      "one\ntwo\nthree\nfour\nchanged\nsix\nseven\neight\nnine\nten\neleven\n",
-    );
-    await git(root, ["add", "--all"]);
-    const uncommitted = await readSnapshot(repositories, root);
-    const uncommittedRename = changeFor(uncommitted, "new name.txt");
-    expect(uncommittedRename).toMatchObject({
-      deletions: 1,
-      insertions: 2,
-      previousPath: "old name.txt",
-      status: "renamed",
+    expect(await readDiff(repoRoot, "new.txt", headToIndex)).toMatchObject({
+      oldContent: null,
+      newContent: "new\n",
     });
-    await expect(
-      readPatch({
-        change: uncommittedRename,
-        changes: uncommitted,
+    expect(
+      await readDiff(repoRoot, "new.txt", {
+        ...headToIndex,
+        target: "workingTree",
       }),
-    ).toMatchObject({
-      patch: expect.stringContaining(
-        "diff --git a/old name.txt b/new name.txt",
-      ),
-      previousPath: "old name.txt",
-    });
-
-    await git(root, ["commit", "-m", "rename"]);
-    const baseChanges = await readSnapshot(repositories, root, "base");
-    const baseRename = changeFor(baseChanges, "new name.txt");
-    expect(baseRename).toMatchObject({
-      deletions: 1,
-      insertions: 2,
-      previousPath: "old name.txt",
-      status: "renamed",
-    });
+    ).toMatchObject({ oldContent: null, newContent: "new\n" });
     await expect(
-      readPatch({
-        change: baseRename,
-        changes: baseChanges,
+      readDiff(repoRoot, "new.txt", {
+        base: { kind: "commit", ref: "no-such-branch" },
+        target: "index",
       }),
-    ).toMatchObject({
-      patch: expect.stringContaining(
-        "diff --git a/old name.txt b/new name.txt",
-      ),
-      previousPath: "old name.txt",
+    ).rejects.toThrow("Git command failed");
+    await git(repoRoot, ["commit", "-m", "first"]);
+    await git(repoRoot, ["checkout", "--detach"]);
+    expect((await readStatus(repoRoot)).branch).toMatchObject({
+      name: null,
+      unborn: false,
     });
   });
 
-  it("returns ours and worktree contents for conflicts", async () => {
-    const root = await createRepository();
-    await git(root, ["switch", "-c", "incoming"]);
-    await writeFile(join(root, "file.txt"), "incoming\n");
-    await git(root, ["add", "file.txt"]);
-    await git(root, ["commit", "-m", "incoming"]);
-    await git(root, ["switch", "main"]);
-    await writeFile(join(root, "file.txt"), "ours\n");
-    await git(root, ["add", "file.txt"]);
-    await git(root, ["commit", "-m", "ours"]);
-    await expect(git(root, ["merge", "incoming"])).rejects.toThrow();
-    const repositories = defineGitRepositories({ allowedRoots: [root] });
-
-    const sourceControl = await readSnapshot(repositories, root);
-    const conflict = changeFor(sourceControl, "file.txt", "conflict");
-    expect(sourceControl.diffs[gitChangeKey(conflict)]).toMatchObject({
+  it("retains upstream divergence and refuses conflicted/submodule diffs explicitly", async () => {
+    const repoRoot = await createRepository();
+    await git(repoRoot, ["branch", "upstream"]);
+    await git(repoRoot, ["branch", "--set-upstream-to=upstream"]);
+    await writeFile(join(repoRoot, "file.txt"), "main\n");
+    await git(repoRoot, ["commit", "-am", "main"]);
+    expect((await readStatus(repoRoot)).branch).toMatchObject({
+      upstream: "upstream",
+      ahead: 1,
+      behind: 0,
+    });
+    await git(repoRoot, ["checkout", "upstream"]);
+    await writeFile(join(repoRoot, "file.txt"), "other\n");
+    await git(repoRoot, ["commit", "-am", "other"]);
+    await git(repoRoot, ["checkout", "main"]);
+    await expect(git(repoRoot, ["merge", "upstream"])).rejects.toThrow();
+    expect((await readStatus(repoRoot)).changes).toContainEqual({
+      path: "file.txt",
+      area: "conflict",
+      status: "modified",
       binary: false,
-      newContent: expect.stringContaining("<<<<<<< HEAD\nours\n"),
-      oldContent: "ours\n",
     });
-  });
-
-  it("retries once when the repository changes during base generation", async () => {
-    const root = await createRepository();
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    await writeFile(join(root, "file.txt"), "before\n");
-    let resolutions = 0;
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => {
-        resolutions += 1;
-        if (resolutions === 2) {
-          await writeFile(join(root, "file.txt"), "after\n");
-        }
-        return base;
-      },
-    });
-
-    const snapshot = await readSnapshot(repositories, root, "base");
-    const change = changeFor(snapshot, "file.txt");
-    expect(resolutions).toBe(4);
-    expect(snapshot.diffs[gitChangeKey(change)]?.patch).toContain("+after");
-  });
-
-  it("fails after one retry when the repository remains incoherent", async () => {
-    const root = await createRepository();
-    const base = (await git(root, ["rev-parse", "HEAD"])).stdout.trim();
-    await writeFile(join(root, "file.txt"), "version-0\n");
-    let resolutions = 0;
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      baseResolver: async () => {
-        resolutions += 1;
-        if (resolutions % 2 === 0) {
-          await writeFile(join(root, "file.txt"), `version-${resolutions}\n`);
-        }
-        return base;
-      },
-    });
-
-    await expect(readSnapshot(repositories, root, "base")).rejects.toThrow(
-      "changed while building",
+    await expect(readDiff(repoRoot, "file.txt")).rejects.toThrow("conflicted");
+    await git(repoRoot, ["merge", "--abort"]);
+    const oid = (await git(repoRoot, ["rev-parse", "HEAD"])).stdout.trim();
+    await git(repoRoot, [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `160000,${oid},module`,
+    ]);
+    expect((await readStatus(repoRoot)).changes).toContainEqual(
+      expect.objectContaining({ path: "module", binary: true }),
     );
-    expect(resolutions).toBe(4);
+    await expect(readDiff(repoRoot, "module", headToIndex)).rejects.toThrow(
+      "submodules",
+    );
   });
 
-  it("returns revision-aware mutation outcomes and obeys permissions", async () => {
-    const root = await createRepository();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      permissions: { discard: true, stage: true, unstage: true },
+  it("canonicalizes access, refuses child roots and symlink traversal, but reads link target text", async () => {
+    const repoRoot = await createRepository();
+    const outside = await createRepository();
+    const denied = gitStatusResource({ allowedRoots: [outside] });
+    await expect(denied.read({ repoRoot }, context())).rejects.toThrow(
+      "not authorized",
+    );
+    await mkdir(join(repoRoot, "child"));
+    await expect(readStatus(join(repoRoot, "child"))).rejects.toThrow(
+      "not a child directory",
+    );
+    await symlink(outside, join(repoRoot, "escape"));
+    await symlink(join(outside, "file.txt"), join(repoRoot, "link"));
+    expect(await readDiff(repoRoot, "link")).toMatchObject({
+      oldContent: null,
+      newContent: join(outside, "file.txt"),
     });
-    const operations = gitOperationHandlers({
-      repositories,
-      resourceId: "repositoryChanges",
-    });
-    type StageContext = Parameters<typeof operations.stage.handle>[1];
-    expectTypeOf<
-      Parameters<StageContext["invalidate"]>[0]
-    >().toEqualTypeOf<"repositoryChanges">();
-    const mutationContext = context();
-    await writeFile(join(root, "file.txt"), "two\n");
-    const before = await readSnapshot(repositories, root);
-
-    await expect(
-      operations.stage.handle(
-        {
-          changes: ["file.txt"],
-          expectedRevision: before.revision,
-          path: root,
-        },
-        mutationContext,
-      ),
-    ).resolves.toMatchObject({ outcome: "success" });
-    expect(mutationContext.invalidate).toHaveBeenCalledExactlyOnceWith(
-      "repositoryChanges",
-      { comparison: "uncommitted", path: root },
+    await expect(readDiff(repoRoot, "escape/file.txt")).rejects.toThrow(
+      "symlink directory",
     );
     await expect(
-      operations.stage.handle(
-        {
-          changes: ["file.txt"],
-          expectedRevision: before.revision,
-          path: root,
-        },
-        mutationContext,
-      ),
-    ).resolves.toMatchObject({ outcome: "stale" });
-    expect(mutationContext.invalidate).toHaveBeenCalledOnce();
-    const staged = await readSnapshot(repositories, root);
-    await expect(
-      operations.unstage.handle(
-        {
-          changes: ["file.txt"],
-          expectedRevision: staged.revision,
-          path: root,
-        },
+      gitStatusResource({ allowedRoots: [repoRoot] }).read(
+        { repoRoot: join(repoRoot, "escape") },
         context(),
       ),
-    ).resolves.toMatchObject({ outcome: "success" });
-
-    await writeFile(join(root, "untracked.txt"), "temporary\n");
-    const dirty = await readSnapshot(repositories, root);
-    await writeFile(join(root, "untracked.txt"), "changed\n");
-    await expect(
-      operations.discard.handle(
-        {
-          changes: ["file.txt", "untracked.txt"],
-          expectedRevision: dirty.revision,
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "stale" });
-    const latestDirty = await readSnapshot(repositories, root);
-    await expect(
-      operations.discard.handle(
-        {
-          changes: ["file.txt", "untracked.txt"],
-          expectedRevision: latestDirty.revision,
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "success" });
-    await expect(readSnapshot(repositories, root)).resolves.toMatchObject({
-      changes: [],
-    });
+    ).rejects.toThrow("not authorized");
+    await symlink(repoRoot, join(outside, "alias"));
+    expect(
+      (
+        await gitStatusResource({ allowedRoots: [repoRoot] }).read(
+          { repoRoot: join(outside, "alias") },
+          context(),
+        )
+      ).repoRoot,
+    ).toBe(repoRoot);
+    // Ambient overrides cannot redirect authorized commands into the other repo.
+    vi.stubEnv("GIT_DIR", join(outside, ".git"));
+    vi.stubEnv("GIT_WORK_TREE", outside);
+    expect((await readStatus(repoRoot)).changes).toContainEqual(
+      expect.objectContaining({ path: "link" }),
+    );
   });
 
-  it("mutates staged and unstaged versions of one path independently", async () => {
-    const root = await createRepository();
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      permissions: { discard: true, stage: true, unstage: true },
-    });
-    const operations = gitOperationHandlers({
-      repositories,
-      resourceId: "sourceControl",
-    });
-    await writeFile(join(root, "file.txt"), "staged\n");
-    await git(root, ["add", "file.txt"]);
-    await writeFile(join(root, "file.txt"), "unstaged\n");
-    const before = await readSnapshot(repositories, root);
-
+  testCases.each([
+    "../secret",
+    "/absolute",
+    ".git/config",
+    "a/../../secret",
+    "a/./b",
+    "a//b",
+  ])("rejects unsafe file %s before capture", async (file) => {
+    const resource = gitDiffResource({ allowedRoots: [testRoot] });
     await expect(
-      operations.discard.handle(
-        {
-          changes: [{ area: "unstaged", path: "file.txt" }],
-          expectedRevision: before.revision,
-          path: root,
-        },
+      resource.read(
+        { repoRoot: testRoot, file, comparison: indexToWorktree },
         context(),
       ),
-    ).resolves.toMatchObject({ outcome: "success" });
-    const staged = await readSnapshot(repositories, root);
-    expect(staged.changes).toEqual([
-      expect.objectContaining({ area: "staged", path: "file.txt" }),
-    ]);
-
-    await writeFile(join(root, "file.txt"), "unstaged again\n");
-    const mixed = await readSnapshot(repositories, root);
-    await expect(
-      operations.unstage.handle(
-        {
-          changes: [{ area: "staged", path: "file.txt" }],
-          expectedRevision: mixed.revision,
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "success" });
-    const unstaged = await readSnapshot(repositories, root);
-    expect(unstaged.changes).toEqual([
-      expect.objectContaining({ area: "unstaged", path: "file.txt" }),
-    ]);
-    await expect(
-      operations.stage.handle(
-        {
-          changes: [{ area: "unstaged", path: "file.txt" }],
-          expectedRevision: unstaged.revision,
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "success" });
+    ).rejects.toThrow("repository-relative");
   });
 
-  it("returns safe mutation errors for denied, traversing, stale, and invalid requests", async () => {
-    const root = await createRepository();
-    const readOnly = defineGitRepositories({ allowedRoots: [root] });
-    const deniedActions = gitOperationHandlers({
-      repositories: readOnly,
-      resourceId: "sourceControl",
-    });
-    await writeFile(join(root, "file.txt"), "two\n");
-    const status = await readSnapshot(readOnly, root);
-    await expect(
-      deniedActions.stage.handle(
-        {
-          changes: ["file.txt"],
-          expectedRevision: status.revision,
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "error" });
+  it("rejects unsupported comparisons and invalid allowed-root policies", () => {
+    expect(() => gitStatusResource({ allowedRoots: [] })).toThrow();
+    expect(() => gitStatusResource({ allowedRoots: ["relative"] })).toThrow();
+    expect(
+      gitDiffResource({ allowedRoots: [testRoot] }).contract.input.safeParse({
+        repoRoot: testRoot,
+        file: "file",
+        comparison: { base: { kind: "index" }, target: "index" },
+      }).success,
+    ).toBe(false);
+  });
+});
 
-    const repositories = defineGitRepositories({
-      allowedRoots: [root],
-      permissions: { applyPatch: true, stage: true },
+describe("shared subscription lifecycle", () => {
+  it("shares one watcher, refreshes after file/index/ref changes, and independently releases subscribers", async () => {
+    const repoRoot = await createRepository();
+    const status = gitStatusResource({ allowedRoots: [repoRoot] });
+    const diff = gitDiffResource({ allowedRoots: [repoRoot] });
+    const statusInvalidated = vi.fn();
+    const diffInvalidated = vi.fn();
+    const stopStatus = status.subscribe(
+      { repoRoot },
+      statusInvalidated,
+      context(),
+    );
+    const stopDiff = diff.subscribe(
+      { repoRoot, file: "file.txt", comparison: indexToWorktree },
+      diffInvalidated,
+      context(),
+    );
+    disposers.push(stopStatus, stopDiff);
+    await vi.waitFor(() => {
+      expect(statusInvalidated).toHaveBeenCalled();
+      expect(diffInvalidated).toHaveBeenCalled();
     });
-    const operations = gitOperationHandlers({
-      repositories,
-      resourceId: "sourceControl",
+    expect(watch).toHaveBeenCalledTimes(1);
+    const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
+    const close = vi.spyOn(watcher, "close");
+    statusInvalidated.mockClear();
+    diffInvalidated.mockClear();
+
+    // Atomic replacement, followed by a new directory, both need native coverage.
+    await writeFile(join(repoRoot, "replacement"), "two\n");
+    await rename(join(repoRoot, "replacement"), join(repoRoot, "file.txt"));
+    await vi.waitFor(() => {
+      expect(statusInvalidated).toHaveBeenCalled();
+      expect(diffInvalidated).toHaveBeenCalled();
     });
-    const current = await readSnapshot(repositories, root);
-    await expect(
-      operations.stage.handle(
-        {
-          changes: ["../outside"],
-          expectedRevision: current.revision,
-          path: root,
-        },
+    expect(
+      await diff.read(
+        { repoRoot, file: "file.txt", comparison: indexToWorktree },
         context(),
       ),
-    ).resolves.toMatchObject({ outcome: "error" });
-    await writeFile(join(root, "file.txt"), "three\n");
-    await expect(
-      operations.applyPatch.handle(
-        {
-          expectedRevision: current.revision,
-          patch: "not a patch",
-          path: root,
-        },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "stale" });
-    const latest = await readSnapshot(repositories, root);
-    await expect(
-      operations.applyPatch.handle(
-        { expectedRevision: latest.revision, patch: "not a patch", path: root },
-        context(),
-      ),
-    ).resolves.toMatchObject({ outcome: "error" });
+    ).toMatchObject({ newContent: "two\n" });
+    await stopStatus();
+    expect(close).not.toHaveBeenCalled();
+    statusInvalidated.mockClear();
+    diffInvalidated.mockClear();
+    await git(repoRoot, ["add", "file.txt"]);
+    await vi.waitFor(() => expect(diffInvalidated).toHaveBeenCalled());
+    expect(statusInvalidated).not.toHaveBeenCalled();
+    diffInvalidated.mockClear();
+    await mkdir(join(repoRoot, "new-directory"));
+    await writeFile(join(repoRoot, "new-directory", "new.txt"), "new\n");
+    await vi.waitFor(() => expect(diffInvalidated).toHaveBeenCalled());
+    diffInvalidated.mockClear();
+    await git(repoRoot, ["branch", "new-ref"]);
+    await vi.waitFor(() => expect(diffInvalidated).toHaveBeenCalled());
+    await stopDiff();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(watcher.closed).toBe(true);
+  });
+
+  it("watches linked-worktree HEAD/index and common refs outside allowedRoots", async () => {
+    const main = await createRepository();
+    const repoRoot = join(main, "linked");
+    await git(main, ["worktree", "add", "-b", "linked", repoRoot]);
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const invalidate = vi.fn();
+    disposers.push(resource.subscribe({ repoRoot }, invalidate, context()));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect((await resource.read({ repoRoot }, context())).branch.name).toBe(
+      "linked",
+    );
+    invalidate.mockClear();
+    await git(main, ["branch", "shared-ref"]);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    invalidate.mockClear();
+    await writeFile(join(repoRoot, "file.txt"), "linked content\n");
+    await git(repoRoot, ["add", "file.txt"]);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(await readDiff(repoRoot, "file.txt", headToIndex)).toMatchObject({
+      newContent: "linked content\n",
+    });
+    invalidate.mockClear();
+    await git(repoRoot, ["checkout", "--detach"]);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+  });
+
+  it("does not attach after immediate disposal or abort, including a pending watcher traversal", async () => {
+    const repoRoot = await createRepository();
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const invalidate = vi.fn();
+    const aborted = new AbortController();
+    const stop = resource.subscribe({ repoRoot }, invalidate, context());
+    await stop();
+    disposers.push(
+      resource.subscribe({ repoRoot }, invalidate, context(aborted.signal)),
+    );
+    aborted.abort();
+    // A successful read waits for the same authorization I/O the disposed
+    // subscriptions started, without relying on a timer-based startup guess.
+    await resource.read({ repoRoot }, context());
+    expect(watch).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+
+    const stopStarting = resource.subscribe(
+      { repoRoot },
+      invalidate,
+      context(),
+    );
+    disposers.push(stopStarting);
+    await vi.waitFor(() => expect(watch).toHaveBeenCalledTimes(1));
+    const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
+    await stopStarting();
+    invalidate.mockClear();
+    watcher.emit("ready");
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(watcher.closed).toBe(true);
+  });
+
+  it("surfaces watcher errors through reads and keeps denied policies out of the shared registry", async () => {
+    const repoRoot = await createRepository();
+    const outside = await createRepository();
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const invalidate = vi.fn();
+    const stop = resource.subscribe({ repoRoot }, invalidate, context());
+    disposers.push(stop);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    const denied = gitStatusResource({ allowedRoots: [outside] });
+    const deniedInvalidation = vi.fn();
+    disposers.push(
+      denied.subscribe({ repoRoot }, deniedInvalidation, context()),
+    );
+    await vi.waitFor(() => expect(deniedInvalidation).toHaveBeenCalled());
+    await expect(denied.read({ repoRoot }, context())).rejects.toThrow(
+      "not authorized",
+    );
+    expect((await resource.read({ repoRoot }, context())).repoRoot).toBe(
+      repoRoot,
+    );
+    expect(watch).toHaveBeenCalledTimes(1);
+
+    const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
+    invalidate.mockClear();
+    watcher.emit("error", new Error("ENOSPC"));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(watcher.closed).toBe(true);
+    await expect(resource.read({ repoRoot }, context())).rejects.toThrow(
+      "watcher failed",
+    );
+    await stop();
+    const recovered = vi.fn();
+    disposers.push(resource.subscribe({ repoRoot }, recovered, context()));
+    await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect((await resource.read({ repoRoot }, context())).repoRoot).toBe(
+      repoRoot,
+    );
+  });
+
+  it("fails explicitly when the environment forces polling", async () => {
+    const repoRoot = await createRepository();
+    vi.stubEnv("CHOKIDAR_USEPOLLING", "true");
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const invalidate = vi.fn();
+    disposers.push(resource.subscribe({ repoRoot }, invalidate, context()));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await expect(resource.read({ repoRoot }, context())).rejects.toThrow(
+      "watcher failed",
+    );
+    expect(watch.mock.results[0]!.value.closed).toBe(true);
+  });
+
+  it("releases a subscription aborted reentrantly by a startup-error invalidation", async () => {
+    const repoRoot = await createRepository();
+    watch.mockImplementationOnce(() => {
+      throw new Error("watch unavailable");
+    });
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const controller = new AbortController();
+    const invalidate = vi.fn(() => controller.abort());
+    disposers.push(
+      resource.subscribe({ repoRoot }, invalidate, context(controller.signal)),
+    );
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect((await resource.read({ repoRoot }, context())).repoRoot).toBe(
+      repoRoot,
+    );
+  });
+
+  it("retains synchronous watcher-start failures until subscription release", async () => {
+    const repoRoot = await createRepository();
+    watch.mockImplementationOnce(() => {
+      throw new Error("watch unavailable");
+    });
+    const resource = gitStatusResource({ allowedRoots: [repoRoot] });
+    const invalidate = vi.fn();
+    disposers.push(resource.subscribe({ repoRoot }, invalidate, context()));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await expect(resource.read({ repoRoot }, context())).rejects.toThrow(
+      "watcher failed",
+    );
+    expect(await readFile(join(repoRoot, "file.txt"), "utf8")).toBe("one\n");
   });
 });
