@@ -3,7 +3,7 @@
 
 # Overmux
 
-Build your own development environment for you and your agents.
+Overmux lets you build your own development environment for you and your agents.
 
 Extend your existing terminal setup with custom rich web interfaces for reviewing code, coordinating agents, and working from your phone.
 
@@ -18,35 +18,16 @@ Main features:
 
 ## Get started
 
-[Get started with Overmux](https://overmux.com/docs/getting-started/install-and-run-overmux), then make it your own.
+Get started with Overmux in the docs:
 
-To understand how the pieces fit together, read [How Overmux works](https://overmux.com/docs/introduction/how-overmux-works). Explore the [documentation](https://overmux.com/docs) for more.
-
-## Why I Built Overmux
-
-As AI coding agents have improved my time has shifted from:
-
-- Writing code in an IDE
-- Running commands manually
-
-To:
-
-- Talking to agents
-- Reviewing code produced by agents
-- Trying to "orient" myself in codebases and keep in touch with how things work
-- Spawning and keeping track of agents
-- Coding on my phone
-
-I lived in a customized tmux setup. But kept noticing that that the terminal, for all it's glory, might not be the best place to build the experiences needed, especially for code review and mobile.
-
-[Herdr](https://github.com/herdrdev/herdr) (a TUI) and [Orca](https://github.com/stablyai/orca) (web based) offer a decent default experience. But they lack the customizability I love with the terminal and neovim. They use their own muxer implementations and dictate workflows.
-
-This future didn't _spark joy_ for me, so I built Overmux to embed my terminal in a Desktop webapp and build my own experience with a mix of tmux terminals + custom web uis.
+- [Get started](https://overmux.com/docs/getting-started/install-and-run-overmux)
+- [How Overmux works](https://overmux.com/docs/introduction/how-overmux-works)
+- [Why I built Overmux](https://overmux.com/docs/introduction/why-i-built-overmux)
 
 
 ## Inspiration / Credits
 
-Overmux was inspired by a few projects I like:
+Overmux was inspired by a few projects I admire:
 
 - [nvim](https://neovim.io/): configuration via code + plugins
 - [pi](https://pi.dev/): plugins as TypeScript npm modules

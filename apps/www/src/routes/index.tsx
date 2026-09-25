@@ -48,7 +48,7 @@ const HomePage = () => (
     >
       <SiteHeaderControls />
     </SiteHeader>
-    <main className="mx-auto w-full max-w-3xl px-6 py-16 sm:py-24">
+    <main className="mx-auto w-full max-w-3xl px-6 pt-8 pb-16 sm:pt-12 sm:pb-24">
       <article className="readme-content">
         <ReactMarkdown components={{ a: READMELink }}>
           {homepageMarkdown}
