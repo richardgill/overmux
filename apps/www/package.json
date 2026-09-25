@@ -24,6 +24,7 @@
     "posthog-node": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

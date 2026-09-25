@@ -2,6 +2,78 @@
 @import "fumadocs-ui/css/shadcn.css";
 @import "fumadocs-ui/css/preset.css";
 
+.readme-content {
+  color: var(--color-fd-foreground);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+
+.readme-content > :first-child {
+  margin-top: 0;
+}
+
+.readme-content h1,
+.readme-content h2 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.readme-content h1 {
+  margin: 3.5rem 0 1.5rem;
+  font-size: clamp(2.5rem, 7vw, 4rem);
+}
+
+.readme-content h2 {
+  margin: 3.5rem 0 1rem;
+  font-size: 1.5rem;
+}
+
+.readme-content p,
+.readme-content ul {
+  margin: 1.25rem 0;
+}
+
+.readme-content ul {
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.readme-content li + li {
+  margin-top: 0.35rem;
+}
+
+.readme-content a {
+  color: var(--color-fd-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.readme-content a:hover {
+  text-decoration-color: currentColor;
+}
+
+.readme-content blockquote {
+  margin: 0 0 3rem;
+  border-left: 3px solid var(--color-fd-primary);
+  border-radius: 0.25rem;
+  background: var(--color-fd-muted);
+  padding: 1rem 1.25rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.readme-content blockquote p {
+  margin: 0;
+}
+
+.readme-content :not(pre) > code {
+  border-radius: 0.25rem;
+  background: var(--color-fd-muted);
+  padding: 0.15em 0.35em;
+  font-size: 0.875em;
+}
+
 /* Keep inline-code styling from shrinking and unbolding documentation headings. */
 .prose :is(h1, h2, h3, h4, h5, h6) code {
   font-size: inherit;
