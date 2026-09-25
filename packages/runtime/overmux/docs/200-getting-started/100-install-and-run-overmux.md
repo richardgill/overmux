@@ -21,7 +21,7 @@ First you need to install the `overmux` CLI.
 Prerequisites:
 
 - [Node.js 22](https://nodejs.org/en/download) or newer
-- [pnpm 10](https://pnpm.io/installation) or newer
+- [pnpm 10.5.0](https://pnpm.io/installation) or newer
 
 Install Overmux globally:
 

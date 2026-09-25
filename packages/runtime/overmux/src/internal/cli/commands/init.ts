@@ -112,13 +112,21 @@ const detectToolchain = (dependencies: InitDependencies): InitToolchain => {
   }
 
   const pnpm = dependencies.runCommand("pnpm", ["--version"]);
-  const major = Number.parseInt(pnpm.stdout.trim().split(".")[0] ?? "", 10);
-  if (!commandExists(pnpm) || pnpm.status !== 0 || !Number.isFinite(major)) {
-    throw new Error("pnpm 10 or newer is required when mise is not installed");
-  }
-  if (major < 10) {
+  const [major = NaN, minor = NaN] = pnpm.stdout.trim().split(".").map(Number);
+  if (
+    !commandExists(pnpm) ||
+    pnpm.status !== 0 ||
+    !Number.isFinite(major) ||
+    !Number.isFinite(minor)
+  ) {
     throw new Error(
-      `pnpm 10 or newer is required when mise is not installed (found ${pnpm.stdout.trim()})`,
+      "pnpm 10.5.0 or newer is required when mise is not installed",
+    );
+  }
+  // pnpm 10.5 introduced build approval settings in pnpm-workspace.yaml.
+  if (major < 10 || (major === 10 && minor < 5)) {
+    throw new Error(
+      `pnpm 10.5.0 or newer is required when mise is not installed (found ${pnpm.stdout.trim()})`,
     );
   }
   return "pnpm";
@@ -161,8 +169,10 @@ const runProjectCommand = ({
   }
 };
 
+// The generated workspace isolates the project and supplies its build allowlist.
+// --ignore-workspace would also ignore that allowlist.
 const pnpmCommands = [
-  ["install", "--ignore-workspace"],
+  ["install"],
   ["exec", "overmux", "check", "--config", "./overmux.config.ts"],
 ] as const;
 
