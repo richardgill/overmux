@@ -1,5 +1,16 @@
 # overmux
 
+## 0.0.8
+
+### Patch Changes
+
+- [#13](https://github.com/richardgill/overmux/pull/13) [`a73f207`](https://github.com/richardgill/overmux/commit/a73f20729477037e0d779c181e79d04d5c55af71) Thanks [@richardgill](https://github.com/richardgill)! - Generate project-local pnpm build approval for node-pty during init, including when tmux is added later. Require pnpm 10.5.0 or newer so the workspace allowlist is honored.
+
+- [#15](https://github.com/richardgill/overmux/pull/15) [`ab776b6`](https://github.com/richardgill/overmux/commit/ab776b659a54877a82af52d2150c14942457839c) Thanks [@richardgill](https://github.com/richardgill)! - Use Zod 4.6.5 throughout the workspace and rebuild dependent packages. Packages exposing Zod schemas now share the application's installation through a ^4.6.5 peer dependency so public schemas remain type-compatible. Newly initialized applications explicitly depend on Zod ^4.6.5.
+
+- Updated dependencies [[`ab776b6`](https://github.com/richardgill/overmux/commit/ab776b659a54877a82af52d2150c14942457839c)]:
+  - @overmux/keybindings@0.0.6
+
 ## 0.0.7
 
 ### Patch Changes

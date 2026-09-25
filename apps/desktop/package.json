@@ -1,6 +1,6 @@
 {
   "name": "@overmux/desktop",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "license": "MIT",
   "description": "Secure Electron desktop shell for an independently running Overmux server",
