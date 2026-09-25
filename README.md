@@ -4,7 +4,9 @@
 
 Build your own development environment using your terminal + a custom web experience.
 
-Keep your terminal workflows. Add custom interfaces for reviewing code, coordinating agents, and whatever you need next.
+Keep your terminal workflows. Add custom web interfaces for reviewing code, coordinating agents, mobile.
+
+Use Overmux: On your desktop and on your phone.
 
 ## License
 
