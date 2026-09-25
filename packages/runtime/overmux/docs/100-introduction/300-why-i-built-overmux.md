@@ -19,4 +19,4 @@ I lived in a customized tmux setup. But kept noticing that that the terminal, fo
 
 [Herdr](https://github.com/herdrdev/herdr) (a TUI) and [Orca](https://github.com/stablyai/orca) (web based) offer a decent default experience. But they lack the customizability I love with the terminal and neovim. They use their own muxer implementations and dictate workflows.
 
-This future doesn't _spark joy_ for me, so I built Overmux to embed my terminal in a Desktop webapp and build my own experience with a mix of tmux terminals + custom web uis.
+This future didn't _spark joy_ for me, so I built Overmux to embed my terminal in a Desktop webapp and build my own experience with a mix of tmux terminals + custom web uis.
