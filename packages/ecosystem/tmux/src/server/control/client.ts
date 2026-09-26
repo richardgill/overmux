@@ -30,7 +30,7 @@ export type TmuxControlClientOptions = {
   reconnectMinDelayMs?: number;
   socket: string;
   processFactory?: (args: readonly string[]) => TmuxControlProcess;
-  versionCheck?: (signal: AbortSignal) => Promise<void> | void;
+  versionCheck?: (signal: AbortSignal) => Promise<void>;
 };
 
 export type TmuxControlClient = {
@@ -132,7 +132,7 @@ export const createTmuxControlClient = (
     reconnect.attempts += 1;
     reconnect.timer = setTimeout(() => {
       reconnect.timer = undefined;
-      ensureConnection();
+      void ensureConnection();
     }, delay);
     reconnect.timer.unref();
   };
@@ -300,7 +300,7 @@ export const createTmuxControlClient = (
     });
   };
 
-  const ensureConnection = () => {
+  const ensureConnection = async () => {
     // New work waits behind an already scheduled retry so repeated failures retain bounded backoff.
     if (
       closed ||
@@ -315,14 +315,8 @@ export const createTmuxControlClient = (
     const controller = new AbortController();
     connection.checking = controller;
     try {
-      const checked = checkVersion(controller.signal);
-      if (checked) {
-        void checked
-          .then(() => attachConnection(generation))
-          .catch((cause) => handleDisconnect(generation, cause));
-      } else {
-        attachConnection(generation);
-      }
+      await checkVersion(controller.signal);
+      attachConnection(generation);
     } catch (cause) {
       handleDisconnect(generation, cause);
     }
@@ -362,7 +356,7 @@ export const createTmuxControlClient = (
         abort();
         return;
       }
-      ensureConnection();
+      void ensureConnection();
       writeNextCommand();
     });
   };
@@ -404,7 +398,7 @@ export const createTmuxControlClient = (
         return () => undefined;
       }
       listeners.add(listener);
-      ensureConnection();
+      void ensureConnection();
       return () => listeners.delete(listener);
     },
   };
