@@ -47,24 +47,6 @@
       inline-size: 100%;
       flex: none;
     }
-    :where(.om-git-change-actions) {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--om-spacing, 0.75rem) * 0.25);
-      min-inline-size: 7rem;
-      padding: calc(var(--om-spacing, 0.75rem) * 0.5);
-      border: 1px solid var(--om-color-border, currentColor);
-      border-radius: var(--om-radius, 0.5rem);
-      color: var(--om-color-fg, inherit);
-      background: var(--om-color-panel, Canvas);
-    }
-    :where(.om-git-change-actions button) {
-      border: 0;
-      color: inherit;
-      background: transparent;
-      font: inherit;
-      text-align: start;
-    }
     :where(.om-git-diff-file) {
       position: relative;
       border: 1px solid var(--om-color-border, currentColor);
@@ -97,17 +79,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    :where(.om-git-diff-header-stats) {
-      display: flex;
-      flex: none;
-      gap: calc(var(--om-spacing, 0.75rem) * 0.5);
-    }
-    :where(.om-git-diff-stat-additions) {
-      color: var(--om-color-success, #3fb950);
-    }
-    :where(.om-git-diff-stat-deletions) {
-      color: var(--om-color-danger, #f85149);
     }
     :where(.om-git-diff-patch) {
       --diffs-font-family: var(--om-font-mono, monospace);

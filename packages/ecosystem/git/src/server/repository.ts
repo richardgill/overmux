@@ -13,7 +13,7 @@ import {
 } from "../shared";
 import type { DiffSides } from "./diff";
 import { GitCommandError, MAX_CONTENT_BYTES, runGit } from "./execution";
-import { parseGitStatus, type ParsedStatusChange } from "./parse-git-status";
+import { parseGitStatus } from "./parse-git-status";
 
 export type Repository = {
   repoRoot: string;
@@ -178,16 +178,13 @@ const readWorkingFile = async ({
 
 // Conflict XY codes use a generic modified summary: the conflict area carries
 // that state without pretending there is a single resolved two-way comparison.
-const statusName = ({ code }: ParsedStatusChange): GitChange["status"] =>
-  code === "A"
-    ? "added"
-    : code === "D"
-      ? "deleted"
-      : code === "R" || code === "C"
-        ? "renamed"
-        : code === "?"
-          ? "untracked"
-          : "modified";
+const statusByCode: Partial<Record<string, GitChange["status"]>> = {
+  A: "added",
+  D: "deleted",
+  R: "renamed",
+  C: "renamed",
+  "?": "untracked",
+};
 
 const binaryPaths = (output: Buffer) => {
   const records = output.toString("utf8").split("\0");
@@ -284,7 +281,7 @@ export const readStatus = async ({
     changes.push({
       path: directory ? change.path.slice(0, -1) : change.path,
       area: change.area,
-      status: statusName(change),
+      status: statusByCode[change.code] ?? "modified",
       binary,
       ...(change.previousPath === undefined
         ? {}

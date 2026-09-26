@@ -5,8 +5,6 @@
 
 import type { GitBranch } from "../shared";
 
-export type ParsedBranchStatus = GitBranch;
-
 export type ParsedStatusChange = {
   area: "conflict" | "staged" | "unstaged";
   code: string;
@@ -16,7 +14,7 @@ export type ParsedStatusChange = {
 };
 
 export type ParsedGitStatus = {
-  branch: ParsedBranchStatus;
+  branch: GitBranch;
   changes: ParsedStatusChange[];
 };
 
@@ -48,7 +46,7 @@ const addIndexAndWorktreeChanges = ({
 
 // Branch headers look like `# branch.head main` and `# branch.ab +2 -1`.
 // The latter means the local branch is two commits ahead and one behind upstream.
-const parseBranchHeader = (record: string, branch: ParsedBranchStatus) => {
+const parseBranchHeader = (record: string, branch: GitBranch) => {
   if (record.startsWith("# branch.head ")) {
     const head = record.slice(14);
     if (head !== "(detached)") {
@@ -174,7 +172,7 @@ const parseChangeRecord = (
 
 export const parseGitStatus = (output: Buffer | string): ParsedGitStatus => {
   const records = output.toString().split("\0").filter(Boolean);
-  const branch: ParsedBranchStatus = {
+  const branch: GitBranch = {
     name: null,
     upstream: null,
     ahead: 0,
