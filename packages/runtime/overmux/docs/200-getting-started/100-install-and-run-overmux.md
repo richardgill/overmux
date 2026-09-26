@@ -4,6 +4,8 @@ title: Install and Run Overmux
 
 First you need to install the `overmux` CLI.
 
+> **Tmux prerequisite:** To use tmux in Overmux, install **tmux 3.2 or newer** on the machine running your Overmux server and ensure `tmux` is on its `PATH`. Check with `tmux -V`. An already-running tmux server must also be 3.2 or newer; upgrading the executable does not upgrade an existing server process.
+
 ### Recommended: Install with Mise
 
 [Mise](https://mise.jdx.dev) installs and manages developer tools and their versions.
