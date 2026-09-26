@@ -1,6 +1,5 @@
 ---
 "@overmux/tmux": patch
-"overmux": patch
 ---
 
-Document tmux 3.2 as the minimum supported version, with verified compatibility results and installation prerequisites.
+Require tmux 3.2 or newer and report a clear error when the executable or running server is too old.

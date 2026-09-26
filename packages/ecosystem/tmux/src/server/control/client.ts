@@ -9,6 +9,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { serializeTmuxCommand } from "./serialize-command";
+import { createTmuxVersionCheck } from "./version";
 import {
   createTmuxControlParser,
   isTmuxControlNotification,
@@ -29,6 +30,7 @@ export type TmuxControlClientOptions = {
   reconnectMinDelayMs?: number;
   socket: string;
   processFactory?: (args: readonly string[]) => TmuxControlProcess;
+  versionCheck?: (signal: AbortSignal) => Promise<void> | void;
 };
 
 export type TmuxControlClient = {
@@ -85,12 +87,15 @@ export const createTmuxControlClient = (
     );
   }
   const createProcess = options.processFactory ?? defaultProcessFactory;
+  const checkVersion =
+    options.versionCheck ?? createTmuxVersionCheck(options.socket);
   const listeners = new Set<(event: TmuxControlNotification) => void>();
   const commands = {
     active: undefined as CommandRequest | undefined,
     pending: [] as CommandRequest[],
   };
   const connection = {
+    checking: undefined as AbortController | undefined,
     bufferedBytes: 0,
     generation: 0,
     process: undefined as TmuxControlProcess | undefined,
@@ -221,6 +226,8 @@ export const createTmuxControlClient = (
     // Advancing the generation makes late events from this process harmless.
     const child = connection.process;
     connection.generation += 1;
+    connection.checking?.abort();
+    connection.checking = undefined;
     connection.process = undefined;
     connection.ready = false;
     child?.kill(signal);
@@ -229,14 +236,13 @@ export const createTmuxControlClient = (
     scheduleReconnect();
   };
 
-  const ensureConnection = () => {
-    // New work waits behind an already scheduled retry so repeated failures retain bounded backoff.
-    if (closed || connection.process || reconnect.timer) {
+  const attachConnection = (generation: number) => {
+    // A version probe may finish after close; never spawn a client for a stale attempt.
+    if (closed || generation !== connection.generation) {
       return;
     }
+    connection.checking = undefined;
     const parser = createTmuxControlParser();
-    const generation = connection.generation + 1;
-    connection.generation = generation;
     connection.ready = false;
     connection.bufferedBytes = 0;
     let child: TmuxControlProcess;
@@ -255,8 +261,8 @@ export const createTmuxControlClient = (
         "-f",
         "no-output,ignore-size",
       ]);
-    } catch {
-      scheduleReconnect();
+    } catch (cause) {
+      handleDisconnect(generation, cause);
       return;
     }
     connection.process = child;
@@ -292,6 +298,34 @@ export const createTmuxControlClient = (
         ),
       );
     });
+  };
+
+  const ensureConnection = () => {
+    // New work waits behind an already scheduled retry so repeated failures retain bounded backoff.
+    if (
+      closed ||
+      connection.checking ||
+      connection.process ||
+      reconnect.timer
+    ) {
+      return;
+    }
+    const generation = connection.generation + 1;
+    connection.generation = generation;
+    const controller = new AbortController();
+    connection.checking = controller;
+    try {
+      const checked = checkVersion(controller.signal);
+      if (checked) {
+        void checked
+          .then(() => attachConnection(generation))
+          .catch((cause) => handleDisconnect(generation, cause));
+      } else {
+        attachConnection(generation);
+      }
+    } catch (cause) {
+      handleDisconnect(generation, cause);
+    }
   };
 
   const command: TmuxControlClient["command"] = (args, commandOptions) => {
@@ -339,6 +373,8 @@ export const createTmuxControlClient = (
         return;
       }
       closed = true;
+      connection.checking?.abort();
+      connection.checking = undefined;
       if (reconnect.timer) {
         clearTimeout(reconnect.timer);
         reconnect.timer = undefined;

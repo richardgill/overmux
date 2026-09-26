@@ -6,49 +6,7 @@ title: Tmux
 
 ## Requirements
 
-**tmux 3.2 or newer** must be installed on the machine running your Overmux server, with `tmux` available on the server process's `PATH`. A recent stable tmux release is recommended.
-
-Check the installed executable:
-
-```sh
-tmux -V
-```
-
-An already-running tmux server may still use an older version after an upgrade. Check it too, using the same socket as your Overmux backend (`-L name` or `-S path` if configured):
-
-```sh
-tmux display-message -p '#{version}'
-```
-
-Both the executable and the running tmux server must meet the minimum. Restart an older server after upgrading, once it is safe to end its existing sessions.
-
-### Why 3.2?
-
-Overmux uses tmux control mode for discovery and operations, and a native tmux client in a pseudoterminal (PTY) for each interactive terminal. It requires `attach-session -f no-output,ignore-size` for the control client, `attach-session -f ignore-size` for initial terminal attachment, and `refresh-client -f '!ignore-size'` when browser dimensions arrive. These client flags prevent background connections and terminals without dimensions from resizing your existing windows.
-
-[tmux 3.2 introduced these attachment and sizing flags](https://github.com/tmux/tmux/blob/3.2/CHANGES). The integration also uses format queries, `set-option -F`, `wait-for`, session/window/pane commands, and `switch-client`; these were exercised on 3.2.
-
-### Compatibility verification
-
-Real-process tests used isolated tmux servers with an empty configuration on Linux (x86-64), not the user's running server:
-
-| Version | Verified result |
-| --- | --- |
-| 3.1c (the release preceding 3.2) | Unsupported: both control and native attachment reject `attach-session -f` with `unknown option -- f`. Connection tests fail before normal operations can run. |
-| 3.2 | Passed control connection and hierarchy discovery, session creation/destruction, window and pane creation/selection, notifications, terminal input/output, shared resizing, terminal reattachment, and control reconnects after server restart or loss of the last session. |
-| 3.6a | Passed the same integration tests. |
-
-The 3.1c and 3.2 executables were built from upstream release archives. This establishes a runtime boundary, not an inference from installation failures. These checks do not cover every later release, macOS, browser rendering, or custom tmux configurations.
-
-To repeat the real-process tests from the Overmux repository, put the version being tested first on `PATH`:
-
-```sh
-export PATH="/path/to/tmux-version/bin:$PATH"
-tmux -V
-pnpm --filter @overmux/tmux exec vitest run \
-  src/server/control/integration.unit.test.ts \
-  src/server/terminal/integration.unit.test.ts
-```
+Requires **tmux 3.2 or newer**.
 
 ## Installation
 

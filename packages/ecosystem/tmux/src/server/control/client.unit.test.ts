@@ -9,6 +9,8 @@ import {
   type TmuxControlClientOptions,
   type TmuxControlProcess,
 } from "./client";
+import { defineTmuxControlBackend } from "./backend";
+import { createTmuxVersionCheck } from "./version";
 
 class FakeControlProcess extends EventEmitter {
   readonly commands: string[] = [];
@@ -87,6 +89,7 @@ const createHarness = (options: Partial<TmuxControlClientOptions> = {}) => {
     reconnectMaxDelayMs: 10_000,
     reconnectMinDelayMs: 10_000,
     socket: "test",
+    versionCheck: () => undefined,
     ...options,
     processFactory,
   });
@@ -98,6 +101,33 @@ afterEach(() => {
 });
 
 describe("persistent tmux control client", () => {
+  it("reports an old running server before attaching even with a newer executable", async () => {
+    const readVersion = vi
+      .fn()
+      .mockResolvedValueOnce("tmux 3.6a")
+      .mockResolvedValueOnce("3.1c");
+    const { client, processes } = createHarness({
+      versionCheck: createTmuxVersionCheck("work", readVersion),
+    });
+    const backend = defineTmuxControlBackend({
+      socket: "work",
+      controlClientFactory: () => client,
+    });
+    const message = "Overmux requires tmux 3.2 or newer; found 3.1c (server).";
+
+    try {
+      await expect(backend.refresh()).rejects.toThrow(message);
+      expect(() => backend.state()).toThrow(message);
+      expect(processes).toHaveLength(0);
+      expect(readVersion.mock.calls.map(([args]) => args)).toEqual([
+        ["-V"],
+        ["-L", "work", "display-message", "-p", "#{version}"],
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
   it("starts lazily, waits for attachment, and runs commands in order", async () => {
     const { client, processes } = createHarness();
     expect(processes).toHaveLength(0);
