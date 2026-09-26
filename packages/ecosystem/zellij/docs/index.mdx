@@ -15,6 +15,30 @@ pnpm add @overmux/zellij
 pnpm exec overmux integration install zellij
 ```
 
+## Targeted tab operations
+
+Register `zellijOperationHandlers({ backend })` from `@overmux/zellij/server` as your application's operations. Their inputs include:
+
+```ts
+// Move a stable tab ID, regardless of the attached clients' selections.
+moveTab({ sessionName: "work", tabId: 8, direction: "left" });
+
+// Create without changing focus, using a terminal pane's reported working directory.
+createTab({
+  sessionName: "work",
+  fromPane: { id: 3, isPlugin: false },
+  name: "tests",
+  command: ["pnpm", "test"],
+});
+
+// Explicit working directories remain supported, but cannot be combined with fromPane.
+createTab({ sessionName: "work", cwd: "/projects/app", name: "shell" });
+```
+
+`fromPane` accepts terminal panes only and resolves within `sessionName`. Its working directory comes from a one-off `list-panes --all --json` metadata query, not the plugin's topology snapshots. A missing source pane or session returns `not-found`. An unavailable `pane_cwd` returns an error, never a fallback directory. Creation returns `{ outcome: "success", created: { kind: "tab", tabId } }` after a plugin snapshot confirms the tab exists.
+
+Moves preserve Zellij 0.45.1 semantics: swap adjacent tabs, rotate the first tab to the end when moving left, and rotate the last tab to the start when moving right. A single-tab move succeeds without waiting for an event. A missing target returns `not-found`; other moves confirm the resulting order against a newer plugin snapshot. Concurrent topology changes can produce a bounded reconciliation error instead of success.
+
 ## Compose a terminal
 
 ```tsx

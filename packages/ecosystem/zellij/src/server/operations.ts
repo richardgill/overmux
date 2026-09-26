@@ -10,8 +10,9 @@ import {
   type ZellijOperationResult,
   type ZellijPaneIdentity,
 } from "../shared/operation-contracts";
-import type { ZellijState } from "../shared/state-contract";
+import type { ZellijSession, ZellijState } from "../shared/state-contract";
 import type { ZellijBackend } from "./backend";
+import { runZellijCommand } from "./zellij-process";
 
 const commandSchema = z.tuple([z.string().min(1)], z.string());
 const sessionNameSchema = z.string().min(1);
@@ -49,6 +50,26 @@ const sessionArguments = (sessionName: string, action: readonly string[]) => [
   "action",
   ...action,
 ];
+const paneDirectorySchema = z.object({
+  id: tabIdSchema,
+  is_plugin: z.boolean(),
+  pane_cwd: z.string().optional(),
+});
+const readTerminalPaneDirectory = async (
+  sessionName: string,
+  id: number,
+  signal: AbortSignal,
+) => {
+  // SessionUpdate omits cwd. Query CLI metadata once for this operation, never to publish topology.
+  const output = await runZellijCommand(
+    sessionArguments(sessionName, ["list-panes", "--all", "--json"]),
+    signal,
+  );
+  return z
+    .array(paneDirectorySchema)
+    .parse(JSON.parse(output))
+    .find((pane) => pane.id === id && !pane.is_plugin);
+};
 const findSession = (state: ZellijState, sessionName: string) =>
   state.sessions.find((session) => session.name === sessionName);
 const hasTab = (state: ZellijState, sessionName: string, tabId: number) =>
@@ -69,6 +90,41 @@ const hasPane = (
       ),
     ),
   );
+const orderedTabIds = (session: ZellijSession) =>
+  [...session.tabs]
+    .sort((left, right) => left.info.position - right.info.position)
+    .map((tab) => tab.info.tab_id);
+const hasTabOrder = (
+  state: ZellijState,
+  sessionName: string,
+  expected: number[],
+) => {
+  const session = findSession(state, sessionName);
+  const actual = session ? orderedTabIds(session) : [];
+  return (
+    actual.length === expected.length &&
+    actual.every((id, index) => id === expected[index])
+  );
+};
+const movedTabOrder = (
+  ids: number[],
+  tabId: number,
+  direction: "left" | "right",
+) => {
+  const index = ids.indexOf(tabId);
+  const adjacent = index + (direction === "left" ? -1 : 1);
+  // Zellij rotates all positions at an edge, rather than swapping the first and last tabs.
+  // https://github.com/zellij-org/zellij/blob/v0.45.1/zellij-server/src/screen.rs#L5959-L5987
+  if (adjacent < 0) {
+    return [...ids.slice(1), tabId];
+  }
+  if (adjacent === ids.length) {
+    return [tabId, ...ids.slice(0, -1)];
+  }
+  return ids.map((id, position) =>
+    position === index ? ids[adjacent]! : position === adjacent ? tabId : id,
+  );
+};
 const paneId = ({ id, isPlugin }: ZellijPaneIdentity) =>
   `${isPlugin ? "plugin" : "terminal"}_${id}`;
 const readConnectedState = async (
@@ -203,22 +259,49 @@ export const zellijOperationHandlers = ({
       .object({
         command: commandSchema.optional(),
         cwd: z.string().min(1).optional(),
+        fromPane: paneIdentitySchema
+          .extend({ isPlugin: z.literal(false) })
+          .optional(),
         name: z.string().min(1).optional(),
         sessionName: sessionNameSchema,
       })
-      .strict(),
-    ({ command, cwd, name, sessionName }, context) =>
+      .strict()
+      .refine(
+        (input) => input.cwd === undefined || input.fromPane === undefined,
+        {
+          message: "cwd and fromPane are mutually exclusive",
+          path: ["fromPane"],
+        },
+      ),
+    ({ command, cwd, fromPane, name, sessionName }, context) =>
       runSafely(async () => {
         const state = await readConnectedState(backend, context.signal);
         if (!findSession(state, sessionName)) {
           return { outcome: "not-found" };
         }
+        let workingDirectory = cwd;
+        if (fromPane) {
+          const source = await readTerminalPaneDirectory(
+            sessionName,
+            fromPane.id,
+            context.signal,
+          );
+          if (!source) {
+            return { outcome: "not-found" };
+          }
+          if (!source.pane_cwd) {
+            throw new Error(
+              `Working directory unavailable for terminal pane ${fromPane.id} in session ${sessionName}`,
+            );
+          }
+          workingDirectory = source.pane_cwd;
+        }
         const args = ["new-tab", "--no-focus"];
         if (name) {
           args.push("--name", name);
         }
-        if (cwd) {
-          args.push("--cwd", cwd);
+        if (workingDirectory) {
+          args.push("--cwd", workingDirectory);
         }
         if (command) {
           args.push("--", ...command);
@@ -245,6 +328,43 @@ export const zellijOperationHandlers = ({
         backend,
         exists: (state) => Boolean(findSession(state, sessionName)),
         signal: context.signal,
+      }),
+  ),
+  moveTab: defineZellijOperation(
+    z
+      .object({
+        direction: z.enum(["left", "right"]),
+        sessionName: sessionNameSchema,
+        tabId: tabIdSchema,
+      })
+      .strict(),
+    ({ direction, sessionName, tabId }, context) =>
+      runSafely(async () => {
+        const state = await readConnectedState(backend, context.signal);
+        const session = findSession(state, sessionName);
+        if (!session || !hasTab(state, sessionName, tabId)) {
+          return { outcome: "not-found" };
+        }
+        const expected = movedTabOrder(
+          orderedTabIds(session),
+          tabId,
+          direction,
+        );
+        await backend.mutate(
+          sessionArguments(sessionName, [
+            "move-tab",
+            direction,
+            "--tab-id",
+            String(tabId),
+          ]),
+          // A single-tab move emits no topology update; only await the CLI's completion in that case.
+          () =>
+            session.tabs.length < 2
+              ? undefined
+              : (nextState) => hasTabOrder(nextState, sessionName, expected),
+          context.signal,
+        );
+        return { outcome: "success" };
       }),
   ),
   renameSession: defineZellijOperation(
