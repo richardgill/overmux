@@ -2,11 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import { defineOvermuxServer } from "overmux";
-import {
-  defineGitRepositories,
-  gitOperationHandlers,
-  gitSourceControlResource,
-} from "@overmux/git/server";
+import { gitDiffResource, gitStatusResource } from "@overmux/git/server";
 import {
   definePiAgents,
   piOperationHandlers,
@@ -73,7 +69,7 @@ const piAgents = definePiAgents({
     },
   },
 });
-const repositories = defineGitRepositories({ allowedRoots: [home] });
+const gitAccess = { allowedRoots: [home] };
 const tmuxState = tmuxResource({ backend: tmuxBackend });
 const piPaneSessionsContract = defineResourceContract({
   input: noInputSchema,
@@ -88,7 +84,6 @@ export default defineOvermuxServer({
   operations: {
     ...tmuxOperations({ backend: tmuxBackend }),
     ...piOperationHandlers({ agents: piAgents }),
-    ...gitOperationHandlers({ repositories, resourceId: "sourceControl" }),
   },
   resources: {
     tmuxState,
@@ -118,7 +113,8 @@ export default defineOvermuxServer({
       dependencies: { piSessions: "piPaneSessions", tmux: "tmuxState" },
       kind: "derived",
     },
-    sourceControl: gitSourceControlResource({ repositories }),
+    gitStatus: gitStatusResource(gitAccess),
+    gitDiff: gitDiffResource(gitAccess),
   },
   streams: {
     piConversation: piConversationStream({ agents: piAgents }),

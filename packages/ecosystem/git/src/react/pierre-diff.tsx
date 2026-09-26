@@ -105,6 +105,7 @@ const isDiffText = (event: PointerEvent) =>
 
 const useNativeTextSelection = (
   container: RefObject<HTMLDivElement | null>,
+  source: unknown,
 ) => {
   useEffect(() => {
     const diffContainer =
@@ -150,7 +151,7 @@ const useNativeTextSelection = (
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerup", onPointerUp, true);
     };
-  }, [container]);
+  }, [container, source]);
 };
 
 const afterRender = (action: () => void) =>
@@ -275,7 +276,7 @@ export const PierrePatchDiff = ({
   patch,
 }: PierrePatchDiffProps) => {
   const container = useRef<HTMLDivElement>(null);
-  useNativeTextSelection(container);
+  useNativeTextSelection(container, patch);
   return (
     <div ref={container} style={{ display: "contents" }}>
       <PatchDiff
@@ -301,8 +302,10 @@ export const PierreFileDiff = ({
   const container = useRef<HTMLDivElement>(null);
   const diffContainer = useRef<HTMLElement>(null);
   const instance = useRef<FileDiffInstance<undefined>>(null);
-  const sourceVersion = useMemo(
-    () => Symbol(),
+  const sourceCount = useRef(0);
+  // Pierre cleanup removes rendered nodes, so remount its element when selected content changes.
+  const source = useMemo(
+    () => ({ key: (sourceCount.current += 1) }),
     [cacheKey, newContent, oldContent, path, previousPath],
   );
   const fileDiff = useMemo(
@@ -325,11 +328,11 @@ export const PierreFileDiff = ({
       ),
     [cacheKey, newContent, oldContent, path, previousPath],
   );
-  const [expandedVersion, setExpandedVersion] = useState<symbol>();
-  const expanded = expandedVersion === sourceVersion;
+  const [expandedSource, setExpandedSource] = useState<typeof source>();
+  const expanded = expandedSource === source;
   const expandWholeFile = useCallback(
-    () => setExpandedVersion(sourceVersion),
-    [sourceVersion],
+    () => setExpandedSource(source),
+    [source],
   );
   const renderSeparator = useCallback(
     (hunk: HunkData, diffInstance: FileDiffInstance<undefined>) =>
@@ -347,7 +350,7 @@ export const PierreFileDiff = ({
     }),
     [diffStyle, expanded, options, renderSeparator],
   );
-  useNativeTextSelection(container);
+  useNativeTextSelection(container, source);
   // Pierre's React FileDiff manages its container, which disables function-based hunk separators.
   // https://github.com/pierrecomputer/pierre/issues/440
   useIsomorphicLayoutEffect(() => {
@@ -373,7 +376,7 @@ export const PierreFileDiff = ({
       {createElement("diffs-container", {
         className,
         "data-om-pierre-diff": "",
-        key: cacheKey,
+        key: source.key,
         ref: diffContainer,
       })}
     </div>

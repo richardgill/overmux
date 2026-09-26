@@ -198,6 +198,16 @@ const discover = (socket: EventTarget, instanceId: string) =>
     }),
   );
 
+const deferred = <T,>() => {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+};
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -376,10 +386,137 @@ describe("createOvermuxHooks", () => {
     expect(received).toHaveBeenCalledOnce();
   });
 
-  it("skips resource reads and subscriptions", async () => {
+  it("coalesces invalidations across observers during reads", async () => {
+    const reads: ReturnType<typeof deferred<{ revision: string }>>[] = [];
+    const readResource = vi.fn(() => {
+      const read = deferred<{ revision: string }>();
+      reads.push(read);
+      return read.promise;
+    });
+    const unsubscribe = vi.fn();
+    const callbacks: { onError: () => void; onInvalidate: () => void }[] = [];
+    const subscribeResource = vi.fn(
+      (options: { onError: () => void; onInvalidate: () => void }) => {
+        callbacks.push(options);
+        return unsubscribe;
+      },
+    );
+    const runtime = {
+      manifest: { resources: ["status"] },
+      overmuxServerApi: { readResource, subscribeResource },
+      refreshCommands: vi.fn(),
+      registerCommand: vi.fn(),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const Resource = () => {
+      const result = useResource({ id: "status", input: { path: "/repo" } });
+      return (
+        <span>
+          {result?.status === "success" ? result.data.revision : result?.status}
+        </span>
+      );
+    };
+
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <RuntimeContext.Provider value={runtime as never}>
+            <Resource />
+            <Resource />
+          </RuntimeContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledOnce());
+    expect(subscribeResource).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      callbacks.forEach((callback) => callback.onInvalidate());
+      callbacks.forEach((callback) => callback.onInvalidate());
+    });
+    expect(readResource).toHaveBeenCalledOnce();
+
+    await act(async () => reads[0]!.resolve({ revision: "stale" }));
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledTimes(2));
+    await act(async () => reads[1]!.resolve({ revision: "fresh" }));
+    await vi.waitFor(() => expect(container.textContent).toBe("freshfresh"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(readResource).toHaveBeenCalledTimes(2);
+
+    // A second real change can arrive in the same turn as the read it invalidates.
+    // Settle that read immediately, without relying on an intermediate React render.
+    await act(async () => {
+      callbacks.forEach((callback) => callback.onInvalidate());
+      expect(readResource).toHaveBeenCalledTimes(3);
+      callbacks.forEach((callback) => callback.onInvalidate());
+      reads[2]!.resolve({ revision: "stale again" });
+    });
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledTimes(4));
+    await act(async () => reads[3]!.resolve({ revision: "later" }));
+    await vi.waitFor(() => expect(container.textContent).toBe("laterlater"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(readResource).toHaveBeenCalledTimes(4);
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("does not loop after an invalidated initial read and its refresh both fail", async () => {
+    const reads: ReturnType<typeof deferred<{ revision: string }>>[] = [];
+    const readResource = vi.fn(() => {
+      const read = deferred<{ revision: string }>();
+      reads.push(read);
+      return read.promise;
+    });
+    let callbacks: { onError: () => void; onInvalidate: () => void };
+    const subscribeResource = vi.fn(
+      (options: { onError: () => void; onInvalidate: () => void }) => {
+        callbacks = options;
+        return vi.fn();
+      },
+    );
+    const runtime = {
+      manifest: { resources: ["status"] },
+      overmuxServerApi: { readResource, subscribeResource },
+      refreshCommands: vi.fn(),
+      registerCommand: vi.fn(),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const Resource = () => {
+      const result = useResource({ id: "status", input: { path: "/repo" } });
+      return <span>{result?.status}</span>;
+    };
+
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <RuntimeContext.Provider value={runtime as never}>
+            <Resource />
+          </RuntimeContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledOnce());
+    await act(async () => callbacks.onError());
+    await act(async () => reads[0]!.reject(new Error("initial failure")));
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledTimes(2));
+    await act(async () => reads[1]!.reject(new Error("refresh failure")));
+    await vi.waitFor(() => expect(container.textContent).toBe("error"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(readResource).toHaveBeenCalledTimes(2);
+  });
+
+  it("cleans up resource callbacks when inputs change or reads are skipped", async () => {
     const readResource = vi.fn(async () => ({ revision: "abc123" }));
     const unsubscribe = vi.fn();
-    const subscribeResource = vi.fn(() => unsubscribe);
+    const callbacks: { onError: () => void; onInvalidate: () => void }[] = [];
+    const subscribeResource = vi.fn(
+      (options: { onError: () => void; onInvalidate: () => void }) => {
+        callbacks.push(options);
+        return unsubscribe;
+      },
+    );
     const runtime = {
       manifest: {
         resources: ["status"],
@@ -390,39 +527,68 @@ describe("createOvermuxHooks", () => {
     };
     const queryClient = new QueryClient();
     let result: unknown;
-    const Resource = ({ skipped }: { skipped: boolean }) => {
+    const Resource = ({ input }: { input: string | typeof skipToken }) => {
       result = useResource({
         id: "status",
-        input: skipped ? skipToken : { path: "/repo" },
+        input: input === skipToken ? skipToken : { path: input },
       });
       return null;
     };
-    const render = async (skipped: boolean) =>
+    const render = async (input: string | typeof skipToken) =>
       act(async () =>
         root.render(
           <QueryClientProvider client={queryClient}>
             <RuntimeContext.Provider value={runtime as never}>
-              <Resource skipped={skipped} />
+              <Resource input={input} />
             </RuntimeContext.Provider>
           </QueryClientProvider>,
         ),
       );
 
-    await render(true);
+    await render(skipToken);
 
     expect(result).toBeUndefined();
     expect(readResource).not.toHaveBeenCalled();
     expect(subscribeResource).not.toHaveBeenCalled();
 
-    await render(false);
+    await render("/repo");
     await vi.waitFor(() => expect(readResource).toHaveBeenCalledOnce());
     expect(subscribeResource).toHaveBeenCalledOnce();
 
-    await render(true);
+    await render("/other");
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledTimes(2));
+    expect(subscribeResource).toHaveBeenCalledTimes(2);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    await act(async () => callbacks[0]!.onInvalidate());
+    expect(readResource).toHaveBeenCalledTimes(2);
+
+    await render(skipToken);
 
     expect(result).toBeUndefined();
-    expect(readResource).toHaveBeenCalledOnce();
-    expect(subscribeResource).toHaveBeenCalledOnce();
-    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(readResource).toHaveBeenCalledTimes(2);
+    expect(subscribeResource).toHaveBeenCalledTimes(2);
+    expect(unsubscribe).toHaveBeenCalledTimes(2);
+    await act(async () => callbacks[1]!.onInvalidate());
+    expect(readResource).toHaveBeenCalledTimes(2);
+
+    await render("/repo");
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledTimes(3));
+    const pending = deferred<{ revision: string }>();
+    readResource.mockReturnValueOnce(pending.promise);
+    await act(async () => {
+      callbacks[2]!.onInvalidate();
+      callbacks[2]!.onInvalidate();
+    });
+    expect(readResource).toHaveBeenCalledTimes(4);
+
+    // Disposing the last observer also prevents a queued refresh after settlement.
+    await render(skipToken);
+    await act(async () => pending.resolve({ revision: "settled after skip" }));
+    await vi.waitFor(() =>
+      expect(
+        queryClient.getQueryState(["status", { path: "/repo" }])?.fetchStatus,
+      ).toBe("idle"),
+    );
+    expect(readResource).toHaveBeenCalledTimes(4);
   });
 });

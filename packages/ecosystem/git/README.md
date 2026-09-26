@@ -1,6 +1,6 @@
 # @overmux/git
 
-Git source-control integration for Overmux.
+Read-only Git status and selected-file diff integration for Overmux.
 
 > **Experimental:** compatibility is not guaranteed.
 

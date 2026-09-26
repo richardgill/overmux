@@ -161,7 +161,7 @@ Each command appears once, even if multiple components register it. `execute()` 
 
 ## Using commands from packages
 
-Packages can export commands to include alongside your own:
+Packages can export commands to include alongside your own. For example, the read-only Git view exports navigation commands:
 
 ```tsx
 import { sourceControlCommands } from "@overmux/git/react";
@@ -175,15 +175,10 @@ export const client = defineOvermuxClient({
 });
 ```
 
-Adding commands to the registry does not register their handlers. For this package, pass the commands to `SourceControlView`:
+Adding commands to the registry does not register their handlers. Pass the commands to `SourceControlView` to enable changed-file navigation and diff scrolling:
 
 ```tsx
-<SourceControlView
-  {...sourceControlProps}
-  commandHandles={sourceControlCommands}
-/>
+<SourceControlView {...gitViewProps} commandHandles={sourceControlCommands} />
 ```
-
-The view registers handlers for navigating changed files and scrolling diffs. They then appear in `useCommands()` alongside your own registered commands.
 
 Keep command IDs unique when combining registries, and pass the same command objects to the client and the component.

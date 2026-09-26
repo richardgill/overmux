@@ -3,12 +3,7 @@
 // `-z` separates records with NUL bytes so paths can safely contain whitespace.
 // Format reference: https://git-scm.com/docs/git-status#_porcelain_format_version_2
 
-export type ParsedBranchStatus = {
-  ahead?: number;
-  behind?: number;
-  head?: string;
-  upstream?: string;
-};
+import type { GitBranch } from "../shared";
 
 export type ParsedStatusChange = {
   area: "conflict" | "staged" | "unstaged";
@@ -19,7 +14,7 @@ export type ParsedStatusChange = {
 };
 
 export type ParsedGitStatus = {
-  branch: ParsedBranchStatus;
+  branch: GitBranch;
   changes: ParsedStatusChange[];
 };
 
@@ -43,18 +38,24 @@ const addIndexAndWorktreeChanges = ({
     changes.push({ ...file, area: "staged", code: indexCode });
   }
   if (worktreeCode && worktreeCode !== ".") {
-    changes.push({ ...file, area: "unstaged", code: worktreeCode });
+    // A staged rename's source belongs to HEAD, not to the index-to-worktree comparison.
+    const { previousPath: _previousPath, ...worktreeFile } = file;
+    changes.push({ ...worktreeFile, area: "unstaged", code: worktreeCode });
   }
 };
 
 // Branch headers look like `# branch.head main` and `# branch.ab +2 -1`.
 // The latter means the local branch is two commits ahead and one behind upstream.
-const parseBranchHeader = (record: string, branch: ParsedBranchStatus) => {
+const parseBranchHeader = (record: string, branch: GitBranch) => {
   if (record.startsWith("# branch.head ")) {
     const head = record.slice(14);
     if (head !== "(detached)") {
-      branch.head = head;
+      branch.name = head;
     }
+    return;
+  }
+  if (record.startsWith("# branch.oid ")) {
+    branch.unborn = record.slice(13) === "(initial)";
     return;
   }
   if (record.startsWith("# branch.upstream ")) {
@@ -171,7 +172,13 @@ const parseChangeRecord = (
 
 export const parseGitStatus = (output: Buffer | string): ParsedGitStatus => {
   const records = output.toString().split("\0").filter(Boolean);
-  const branch: ParsedBranchStatus = {};
+  const branch: GitBranch = {
+    name: null,
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    unborn: false,
+  };
   const changes: ParsedStatusChange[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index] ?? "";

@@ -1,119 +1,175 @@
 import { z } from "zod";
 
+// Example: "/home/me/code/app"
 export const absolutePathSchema = z
   .string()
   .min(1)
-  .refine((path) => path.startsWith("/"), "Expected an absolute path");
+  .refine(
+    (path) => path.startsWith("/") && !path.includes("\0"),
+    "Expected an absolute path",
+  );
 
-export const gitComparisonSchema = z.enum(["uncommitted", "base"]);
+// Example: "src/app.ts", relative to repoRoot.
+export const gitFileSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (file) =>
+      !file.startsWith("/") &&
+      !file.includes("\0") &&
+      file
+        .split("/")
+        .every(
+          (part) =>
+            part !== "" &&
+            part !== "." &&
+            part !== ".." &&
+            part.toLowerCase() !== ".git",
+        ),
+    "Expected a repository-relative file outside Git metadata",
+  );
+
+export const gitResourceOptionsSchema = z
+  .object({
+    allowedRoots: z.array(absolutePathSchema).min(1).readonly(),
+  })
+  .strict();
+
+export const gitStatusInputSchema = z
+  .object({ repoRoot: absolutePathSchema })
+  .strict();
+
+export const gitBranchSchema = z
+  .object({
+    // A detached HEAD has no name; an unborn branch retains its intended name.
+    name: z.string().min(1).nullable(),
+    upstream: z.string().min(1).nullable(),
+    ahead: z.number().int().nonnegative(),
+    behind: z.number().int().nonnegative(),
+    // True before the branch's first commit: it has a name, but HEAD points to no commit.
+    unborn: z.boolean(),
+  })
+  .strict();
 
 export const gitChangeSchema = z
   .object({
-    area: z.enum(["staged", "unstaged", "conflict"]).optional(),
-    binary: z.boolean(),
-    deletions: z.number().int().nonnegative(),
-    insertions: z.number().int().nonnegative(),
-    path: z.string().min(1),
-    previousPath: z.string().min(1).optional(),
+    path: gitFileSchema,
+    previousPath: gitFileSchema.optional(),
+    area: z.enum(["staged", "unstaged", "conflict"]),
     status: z.enum(["added", "modified", "deleted", "renamed", "untracked"]),
-  })
-  .strict();
-
-const gitUncommittedChangeSchema = gitChangeSchema.extend({
-  area: z.enum(["staged", "unstaged", "conflict"]),
-});
-
-const gitBranchSchema = z
-  .object({
-    ahead: z.number().int().nonnegative(),
-    behind: z.number().int().nonnegative(),
-    name: z.string().min(1).optional(),
-    upstream: z.string().min(1).optional(),
-  })
-  .strict();
-
-export const gitSourceControlFileSchema = z
-  .object({
     binary: z.boolean(),
-    newContent: z.string().nullable(),
+  })
+  .strict();
+
+export const gitStatusSchema = z
+  .object({
+    repoRoot: absolutePathSchema,
+    branch: gitBranchSchema,
+    changes: z.array(gitChangeSchema),
+  })
+  .strict();
+
+// Unstaged: { base: { kind: "index" }, target: "workingTree" }
+// Staged: { base: { kind: "commit", ref: "HEAD" }, target: "index" }
+// Against a branch: { base: { kind: "commit", ref: "main" }, target: "workingTree" }
+export const gitComparisonSchema = z
+  .object({
+    base: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("index") }).strict(),
+      z
+        .object({
+          kind: z.literal("commit"),
+          ref: z
+            .string()
+            .min(1)
+            .refine((ref) => !ref.includes("\0")),
+        })
+        .strict(),
+    ]),
+    target: z.enum(["workingTree", "index"]),
+  })
+  .strict()
+  .refine(
+    ({ base, target }) => base.kind !== "index" || target === "workingTree",
+    "Index-to-index comparison is unsupported",
+  );
+// Example: {
+//   repoRoot: "/home/me/code/app", file: "src/app.ts",
+//   comparison: { base: { kind: "index" }, target: "workingTree" },
+// }
+export const gitDiffInputSchema = z
+  .object({
+    repoRoot: absolutePathSchema,
+    file: gitFileSchema,
+    comparison: gitComparisonSchema,
+  })
+  .strict();
+// Examples (text excludes the line terminator):
+// { kind: "context", oldLine: 1, newLine: 1, text: "unchanged" }
+// { kind: "removed", oldLine: 2, text: "before" }
+// { kind: "added", newLine: 2, text: "after" }
+export const gitDiffLineSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("context"),
+      oldLine: z.number().int().positive(),
+      newLine: z.number().int().positive(),
+      text: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("removed"),
+      oldLine: z.number().int().positive(),
+      text: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("added"),
+      newLine: z.number().int().positive(),
+      text: z.string(),
+    })
+    .strict(),
+]);
+// Example of adding the first line to an empty file: {
+//   oldStart: 0, oldCount: 0, newStart: 1, newCount: 1,
+//   lines: [{ kind: "added", newLine: 1, text: "hello" }],
+// }
+export const gitDiffHunkSchema = z
+  .object({
+    oldStart: z.number().int().nonnegative(),
+    oldCount: z.number().int().nonnegative(),
+    newStart: z.number().int().nonnegative(),
+    newCount: z.number().int().nonnegative(),
+    lines: z.array(gitDiffLineSchema),
+  })
+  .strict();
+// Example of a new text file (null means absent; "" would mean an empty file): {
+//   file: "hello.txt", binary: false, oldContent: null, newContent: "hello\n",
+//   hunks: [{
+//     oldStart: 0, oldCount: 0, newStart: 1, newCount: 1,
+//     lines: [{ kind: "added", newLine: 1, text: "hello" }],
+//   }],
+// }
+export const gitDiffSchema = z
+  .object({
+    file: gitFileSchema,
+    previousPath: gitFileSchema.optional(),
+    binary: z.boolean(),
     oldContent: z.string().nullable(),
-    patch: z.string(),
-    path: z.string().min(1),
-    previousPath: z.string().min(1).optional(),
+    newContent: z.string().nullable(),
+    hunks: z.array(gitDiffHunkSchema),
   })
   .strict();
 
-const sourceControlFields = {
-  diffs: z.record(z.string(), gitSourceControlFileSchema),
-  revision: z.string().min(1),
-  root: absolutePathSchema,
-};
-
-export const gitSourceControlSchema = z.discriminatedUnion("comparison", [
-  z
-    .object({
-      ...sourceControlFields,
-      branch: gitBranchSchema,
-      changes: z.array(gitUncommittedChangeSchema),
-      comparison: z.literal("uncommitted"),
-    })
-    .strict(),
-  z
-    .object({
-      ...sourceControlFields,
-      base: z.string().min(1),
-      changes: z.array(gitChangeSchema),
-      comparison: z.literal("base"),
-    })
-    .strict(),
-]);
-
-export const gitSourceControlInputSchema = z
-  .object({ comparison: gitComparisonSchema, path: absolutePathSchema })
-  .strict();
-
-const changeSelectionSchema = z.union([
-  z.string().min(1),
-  z
-    .object({
-      path: z.string().min(1),
-      area: z.enum(["staged", "unstaged"]).optional(),
-    })
-    .strict(),
-]);
-
-export const gitMutationInputSchema = z
-  .object({
-    path: absolutePathSchema,
-    changes: z.array(changeSelectionSchema).min(1),
-    expectedRevision: z.string().min(1),
-  })
-  .strict();
-
-export const gitApplyPatchInputSchema = z
-  .object({
-    path: absolutePathSchema,
-    patch: z.string().min(1),
-    expectedRevision: z.string().min(1),
-  })
-  .strict();
-
-export const gitMutationResultSchema = z.discriminatedUnion("outcome", [
-  z
-    .object({ outcome: z.literal("success"), revision: z.string().min(1) })
-    .strict(),
-  z
-    .object({ outcome: z.literal("stale"), revision: z.string().min(1) })
-    .strict(),
-  z
-    .object({ outcome: z.literal("error"), message: z.string().min(1) })
-    .strict(),
-]);
-
+export type GitResourceOptions = z.infer<typeof gitResourceOptionsSchema>;
+export type GitStatusInput = z.infer<typeof gitStatusInputSchema>;
+export type GitBranch = z.infer<typeof gitBranchSchema>;
 export type GitChange = z.infer<typeof gitChangeSchema>;
-export type GitSourceControl = z.infer<typeof gitSourceControlSchema>;
-export type GitSourceControlFile = z.infer<typeof gitSourceControlFileSchema>;
-export type GitMutationResult = z.infer<typeof gitMutationResultSchema>;
-
-export const gitChangeKey = (change: Pick<GitChange, "area" | "path">) =>
-  `${change.area ?? "base"}:${change.path}`;
+export type GitStatus = z.infer<typeof gitStatusSchema>;
+export type GitComparison = z.infer<typeof gitComparisonSchema>;
+export type GitDiffInput = z.infer<typeof gitDiffInputSchema>;
+export type GitDiffLine = z.infer<typeof gitDiffLineSchema>;
+export type GitDiffHunk = z.infer<typeof gitDiffHunkSchema>;
+export type GitDiff = z.infer<typeof gitDiffSchema>;
