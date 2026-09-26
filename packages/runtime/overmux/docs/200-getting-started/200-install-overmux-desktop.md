@@ -22,25 +22,18 @@ Download the ZIP for your Mac from the [Overmux releases](https://github.com/ric
 
 Overmux is not currently signed or notarized. Follow [Apple's instructions for opening an app from an unidentified developer](https://support.apple.com/en-us/102445) to allow it to run.
 
-### macOS blocks the app from opening
+<details>
+<summary>macOS says Overmux is damaged or the developer cannot be verified</summary>
 
-macOS Gatekeeper, which checks downloaded apps before opening them, may report that “Overmux.app is damaged and can’t be opened” or that “the developer cannot be verified”. If the app is blocked by its download quarantine flag, you can remove that flag in Terminal.
-
-Only run this for an app you trust and downloaded from the official [Overmux releases](https://github.com/richardgill/overmux/releases), since it bypasses the quarantine check for this app.
-
-For the `~/Applications` location used above:
+For quarantine-related blocking, run this **only for a trusted download from [official Overmux releases](https://github.com/richardgill/overmux/releases)**:
 
 ```bash
 xattr -dr com.apple.quarantine "$HOME/Applications/Overmux.app"
 ```
 
-If you placed the app in `/Applications` instead, use:
+Use `/Applications/Overmux.app` instead if you installed it there. Then reopen Overmux in Finder.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Overmux.app
-```
-
-Then try opening `Overmux.app` again in Finder. This only addresses quarantine-related blocking, not every launch failure.
+</details>
 
 ## Linux
 
