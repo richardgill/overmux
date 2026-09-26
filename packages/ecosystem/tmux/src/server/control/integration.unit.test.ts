@@ -72,9 +72,8 @@ const controlClientAttachment = async (socket: string) => {
     "-u",
     "list-clients",
     "-F",
-    "#{client_pid}\t#{session_name}",
-    "-f",
-    "#{client_control_mode}",
+    // Conditional formats also work on tmux 3.2, which lacks list-clients -f.
+    "#{?client_control_mode,#{client_pid}\t#{session_name},}",
   ]);
   const [pid, session] = String(stdout).trim().split("\t");
   if (!pid || !session) {
@@ -168,10 +167,11 @@ describe("real isolated tmux control client", () => {
   ])("round trips $name", async ({ value }) => {
     const { client } = await createIsolatedControlClient();
 
-    await client.command(["set-buffer", "-b", "roundtrip", value]);
+    // User options return raw text; show-buffer escapes tabs and backslashes on older tmux.
+    await client.command(["set-option", "-g", "@roundtrip", value]);
 
     await expect(
-      client.command(["show-buffer", "-b", "roundtrip"]),
+      client.command(["show-options", "-gv", "@roundtrip"]),
     ).resolves.toBe(`${value}\n`);
   });
 
@@ -186,9 +186,7 @@ describe("real isolated tmux control client", () => {
     const { stdout: clientFlags } = await runTmux(socket, [
       "list-clients",
       "-F",
-      "#{client_flags}",
-      "-f",
-      "#{client_control_mode}",
+      "#{?client_control_mode,#{client_flags},}",
     ]);
 
     expect(sessions).toBe("control\n");

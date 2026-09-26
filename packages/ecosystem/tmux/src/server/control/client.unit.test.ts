@@ -9,6 +9,8 @@ import {
   type TmuxControlClientOptions,
   type TmuxControlProcess,
 } from "./client";
+import { defineTmuxControlBackend } from "./backend";
+import { createTmuxVersionCheck } from "./version";
 
 class FakeControlProcess extends EventEmitter {
   readonly commands: string[] = [];
@@ -87,24 +89,61 @@ const createHarness = (options: Partial<TmuxControlClientOptions> = {}) => {
     reconnectMaxDelayMs: 10_000,
     reconnectMinDelayMs: 10_000,
     socket: "test",
+    versionCheck: async () => undefined,
     ...options,
     processFactory,
   });
   return { client, processes, spawnArguments };
 };
 
+const waitForProcess = (processes: FakeControlProcess[]) =>
+  vi.waitFor(() => {
+    const process = processes[0];
+    if (!process) {
+      throw new Error("Tmux control process has not started");
+    }
+    return process;
+  });
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("persistent tmux control client", () => {
+  it("reports an old running server before attaching even with a newer executable", async () => {
+    const readVersion = vi
+      .fn()
+      .mockResolvedValueOnce("tmux 3.6a")
+      .mockResolvedValueOnce("3.1c");
+    const { client, processes } = createHarness({
+      versionCheck: createTmuxVersionCheck("work", readVersion),
+    });
+    const backend = defineTmuxControlBackend({
+      socket: "work",
+      controlClientFactory: () => client,
+    });
+    const message = "Overmux requires tmux 3.2 or newer; found 3.1c (server).";
+
+    try {
+      await expect(backend.refresh()).rejects.toThrow(message);
+      expect(() => backend.state()).toThrow(message);
+      expect(processes).toHaveLength(0);
+      expect(readVersion.mock.calls.map(([args]) => args)).toEqual([
+        ["-V"],
+        ["-L", "work", "display-message", "-p", "#{version}"],
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
   it("starts lazily, waits for attachment, and runs commands in order", async () => {
     const { client, processes } = createHarness();
     expect(processes).toHaveLength(0);
 
     const first = client.command(["first"]);
     const second = client.command(["second"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     expect(process.commands).toEqual([]);
 
     process.acceptAttachment();
@@ -124,7 +163,7 @@ describe("persistent tmux control client", () => {
   it("rejects failed commands and continues with the next command", async () => {
     const { client, processes } = createHarness();
     const failed = client.command(["bad-command"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
 
     process.failCommand("bad command\n");
@@ -143,7 +182,7 @@ describe("persistent tmux control client", () => {
 
     await expect(client.command(["third"])).rejects.toThrow("queue is full");
 
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
     process.completeCommand("first\n");
     process.completeCommand("second\n");
@@ -189,7 +228,7 @@ describe("persistent tmux control client", () => {
   it("removes an aborted queued command before it is written", async () => {
     const { client, processes } = createHarness();
     const active = client.command(["active"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
     const controller = new AbortController();
     const queued = client.command(["queued"], { signal: controller.signal });
@@ -208,7 +247,7 @@ describe("persistent tmux control client", () => {
     const controller = new AbortController();
     const aborted = client.command(["old"], { signal: controller.signal });
     const next = client.command(["new"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
 
     controller.abort(new Error("cancel active"));
@@ -225,7 +264,7 @@ describe("persistent tmux control client", () => {
   it("disconnects when one command response exceeds the buffer limit", async () => {
     const { client, processes } = createHarness({ maxBufferedBytes: 64 });
     const pending = client.command(["large-output"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
 
     process.beginCommandResponse();
@@ -244,7 +283,7 @@ describe("persistent tmux control client", () => {
     });
     client.subscribe(vi.fn());
 
-    processes[0]!.failStdin("write EPIPE");
+    (await waitForProcess(processes)).failStdin("write EPIPE");
     await vi.advanceTimersByTimeAsync(10);
 
     expect(processes).toHaveLength(2);
@@ -258,7 +297,7 @@ describe("persistent tmux control client", () => {
       reconnectMinDelayMs: 10,
     });
     const active = client.command(["active"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
     const queued = client.command(["queued"]);
 
@@ -278,7 +317,7 @@ describe("persistent tmux control client", () => {
   it("rejects a command when the process exits during a partial response", async () => {
     const { client, processes } = createHarness();
     const pending = client.command(["partial"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
 
     process.beginCommandResponse();
@@ -297,7 +336,7 @@ describe("persistent tmux control client", () => {
     });
     const listener = vi.fn();
     client.subscribe(listener);
-    const stale = processes[0]!;
+    const stale = await waitForProcess(processes);
     stale.failStdin("disconnected");
     await vi.advanceTimersByTimeAsync(10);
     const current = processes[1]!;
@@ -320,6 +359,7 @@ describe("persistent tmux control client", () => {
     const { client, processes, spawnArguments } = createHarness();
 
     client.subscribe(vi.fn());
+    const process = await waitForProcess(processes);
 
     expect(spawnArguments).toEqual([
       [
@@ -332,7 +372,7 @@ describe("persistent tmux control client", () => {
         "no-output,ignore-size",
       ],
     ]);
-    processes[0]!.acceptAttachment();
+    process.acceptAttachment();
     await client.close();
   });
 
@@ -344,7 +384,7 @@ describe("persistent tmux control client", () => {
     });
     const pending = client.command(["before-attachment"]);
 
-    processes[0]!.rejectAttachment("no sessions\n");
+    (await waitForProcess(processes)).rejectAttachment("no sessions\n");
 
     await expect(pending).rejects.toThrow("no sessions");
     await vi.advanceTimersByTimeAsync(9);
@@ -361,7 +401,7 @@ describe("persistent tmux control client", () => {
       reconnectMinDelayMs: 10,
     });
     client.subscribe(vi.fn());
-    processes[0]!.exit();
+    (await waitForProcess(processes)).exit();
 
     const pending = client.command(["after-disconnect"]);
     expect(processes).toHaveLength(1);
@@ -385,7 +425,7 @@ describe("persistent tmux control client", () => {
     });
     client.subscribe(vi.fn());
 
-    processes[0]!.exit();
+    (await waitForProcess(processes)).exit();
     await vi.advanceTimersByTimeAsync(9);
     expect(processes).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -410,7 +450,7 @@ describe("persistent tmux control client", () => {
     const { client, processes } = createHarness();
     const listener = vi.fn();
     const unsubscribe = client.subscribe(listener);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
 
     process.notify("%window-pane-changed @1 %2");
@@ -429,7 +469,7 @@ describe("persistent tmux control client", () => {
   it("closes the process, rejects queued work, and prevents reconnects", async () => {
     const { client, processes } = createHarness();
     const active = client.command(["active"]);
-    const process = processes[0]!;
+    const process = await waitForProcess(processes);
     process.acceptAttachment();
     const queued = client.command(["queued"]);
 
