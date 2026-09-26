@@ -1,5 +1,11 @@
 # @overmux/tmux
 
+## 0.0.9
+
+### Patch Changes
+
+- [#19](https://github.com/richardgill/overmux/pull/19) [`e214a92`](https://github.com/richardgill/overmux/commit/e214a923d6932a2875eb1458e65083b88f7f60e8) Thanks [@richardgill](https://github.com/richardgill)! - Require tmux 3.2 or newer and report a clear error when the executable or running server is too old.
+
 ## 0.0.8
 
 ### Patch Changes
