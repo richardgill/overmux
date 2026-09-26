@@ -412,6 +412,26 @@ Render an [xterm.js](https://xtermjs.org/) terminal using [`@overmux/xterm`](/do
 
 For server-enforced input blocking, set `allowInput: false` on `tmuxStream`. `TmuxXterm` provides application input gating through `active`, active focus, and shortcut input-target registration. It renders only `XtermTerminal`; applications own error messages and close controls. Style the xterm wrapper with `className` and `style`; there is no tmux stylesheet. Application-owned mobile keys can send through its forwarded xterm `input` handle. Give the parent a bounded height and keep error UI above or below the terminal.
 
+### `TmuxGhostty`
+
+Use the same headless terminal with the [Ghostty browser renderer](https://github.com/coder/ghostty-web):
+
+```tsx
+import { TmuxGhostty } from "@overmux/tmux/react";
+import "@overmux/ghostty/styles.css";
+
+<TmuxGhostty
+  terminal={terminal}
+  active={true}
+  options={{ fontSize: 14 }}
+  style={{ height: 400 }}
+/>;
+```
+
+`TmuxGhostty` accepts `GhosttyTerminal` props except `containerRef` and uses the same `terminal` and `active` semantics as `TmuxXterm`. It renders only the terminal; applications own error messages and close controls. Local scrollback defaults to zero for tmux, but can be overridden in `options`.
+
+The forwarded `TmuxGhosttyHandle` exposes `fit`, `focus`, `reset`, `write`, and `input`. Its `input` accepts strings and `Uint8Array`, preserving binary application input for the tmux transport and respecting `active`. Browser keyboard input is text, as provided by ghostty-web. Output received before WASM initialization is queued and acknowledged only after rendering processes it.
+
 ## Control client policy
 
 `defineTmuxControlBackend` keeps one targetless `tmux -C` process attached with `no-output,ignore-size`. Control mode must attach to a live session, but the hidden client has no session-specific UI. With global `detach-on-destroy off`, tmux moves that client to another surviving session. With `detach-on-destroy on`, tmux exits it and Overmux reconnects. When the server disappears or no sessions exist, Overmux retries with bounded backoff and does not create an internal session.

@@ -47,6 +47,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@overmux/ghostty": "workspace:*",
     "@overmux/pty": "workspace:*",
     "@overmux/terminal-stream": "workspace:*",
     "@overmux/xterm": "workspace:*"

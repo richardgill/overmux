@@ -1,3 +1,8 @@
+export {
+  TmuxGhostty,
+  type TmuxGhosttyHandle,
+  type TmuxGhosttyProps,
+} from "./tmux-ghostty";
 export { TmuxXterm, type TmuxXtermProps } from "./tmux-xterm";
 export {
   useTmuxTerminal,
