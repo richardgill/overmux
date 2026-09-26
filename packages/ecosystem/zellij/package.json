@@ -23,7 +23,6 @@
       "types": "./dist/install/index.d.ts",
       "import": "./dist/install/index.js"
     },
-    "./styles.css": "./dist/react/styles.css",
     "./shared": {
       "types": "./dist/shared/index.d.ts",
       "import": "./dist/shared/index.js"
@@ -50,7 +49,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "pnpm check-plugin-artifact && rm -rf dist && vp pack && cp src/react/styles.css dist/react/styles.css && node scripts/check-react-build.ts",
+    "build": "pnpm check-plugin-artifact && rm -rf dist && vp pack",
     "build-plugin": "node scripts/build-zellij-plugin.ts",
     "check-plugin": "pnpm build-plugin --check && pnpm exec turbo run integration-test --filter @overmux/zellij",
     "check-plugin-artifact": "node scripts/check-zellij-plugin-artifact.ts",

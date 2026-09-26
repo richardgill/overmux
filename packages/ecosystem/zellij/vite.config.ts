@@ -16,7 +16,6 @@ export default defineConfig({
     },
     {
       clean: false,
-      deps: { neverBundle: ["./styles.css"] },
       dts: { sourcemap: true },
       entry: {
         "client/index": "src/client/index.ts",

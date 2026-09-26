@@ -64,11 +64,56 @@ A stream never changes sessions. Change the input passed to Overmux's `useStream
 
 `@overmux/terminal-stream` owns sequence validation, acknowledgement ordering, and pause/resume watermarks. The Zellij package only connects those shared controls to PTY `pause()` and `resume()`; its tests cover that delegation rather than duplicating the flow-control algorithm's unit suite.
 
-```tsx
-import { ZellijXterm } from "@overmux/zellij/react";
-import "@overmux/zellij/styles.css";
+## Compose a terminal
 
-<ZellijXterm active onClose={closeView} stream={stream} />;
+```tsx
+import {
+  ZellijXterm,
+  useZellijTerminal,
+  type ZellijTerminalConnection,
+} from "@overmux/zellij/react";
+
+const TerminalView = ({ stream, closeView }: {
+  stream: ZellijTerminalConnection;
+  closeView: () => void;
+}) => {
+  const terminal = useZellijTerminal({ stream });
+  return (
+    <>
+      <ZellijXterm active terminal={terminal} />
+      {terminal.error ? <div role="alert">{terminal.error.message}</div> : null}
+      <button onClick={closeView}>Close</button>
+    </>
+  );
+};
 ```
 
-`ZellijXterm` owns xterm composition, active-view input gating, shortcut input, and error/close presentation. The renderer-neutral `createZellijTerminalClient` is available from `@overmux/zellij/client`.
+`useZellijTerminal({ stream, onError?, onConnectionStatusChange? })` owns connection cleanup and exposes `error`, `input`, `resize`, and `attachRenderer`. The application owns error and close UI; closing a view should unmount the hook owner. Changing the transport closes and unsubscribes the old client. React StrictMode's effect replay does not close the live transport.
+
+`ZellijXterm` only owns rendering, active-view input gating, and shortcut input. It accepts `terminal`, not `stream`, `onClose`, or connection callbacks. Local xterm scrollback defaults to `0`; override it with `options={{ scrollback: 1_000 }}`. Use xterm's `className` and `style` props directly. The extra Zellij wrapper, `containerClassName`, `containerStyle`, `ZellijXtermStyle`, and `@overmux/zellij/styles.css` export have been removed; xterm loads its own styles.
+
+### Renderer lifetime
+
+A hook can have one renderer at a time. `terminal.attachRenderer({ fit, reset, write })` returns an idempotent detach function; detaching does not close the connection. Output arriving without a renderer remains pending, without acknowledgements. Shared terminal-stream write limits and server byte watermarks pause PTY output rather than buffering indefinitely. Custom transports must honor that server-side backpressure contract. Detachment releases writes already handed to the destroyed renderer once, since their callbacks may never fire; this does not mean the user saw them. Late callbacks cannot acknowledge a later attachment or terminal generation.
+
+### Renderer remount limitation
+
+**Known limitation: remount preserves the connection, not the terminal state.** Unmounting `ZellijXterm` destroys its screen, cursor/input modes, and partially parsed escape sequences. A new renderer receives only pending and future bytes, not previously acknowledged output. For example, an update to one line can appear without the heading painted before unmount. With no pending or new output, the remounted screen stays blank. Bytes completing an escape sequence begun in the old renderer can also be misinterpreted.
+
+The fixed Zellij protocol has no redraw message, and the server ignores unchanged dimensions. Changing dimensions to provoke a redraw is not a reliable workaround: it can resize shared panes or have no effect because of another client's size. In development, StrictMode can also discard the first xterm after buffered output was delivered to it, leaving the replayed renderer empty. This does not affect every fresh mount, but preserving the transport during effect replay does not preserve xterm state.
+
+**Workaround: keep `ZellijXterm` mounted when switching or hiding views.** Preserve its usable dimensions and use `visibility: hidden` with `active={false}` rather than conditionally rendering it:
+
+```tsx
+<ZellijXterm
+  terminal={terminal}
+  active={visible}
+  style={{ visibility: visible ? "visible" : "hidden" }}
+/>
+```
+
+The existing emulator continues processing output while hidden; `active={false}` gates input, not output or sizing.
+
+If the renderer was destroyed, replacing the fixed stream and its PTY client obtains fresh attachment output, but creates a different client and does not guarantee the previous client's tab/pane selection. A never-sized stream still waits for initial dimensions before attaching; this API makes no headless navigation or redraw guarantees. Automatic restoration of a destroyed renderer is not implemented.
+
+The renderer-neutral `createZellijTerminalClient` remains available from `@overmux/zellij/client`.

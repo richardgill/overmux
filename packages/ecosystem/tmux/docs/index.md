@@ -446,6 +446,26 @@ Attach a custom renderer with `terminal.attachRenderer(renderer)` in an effect a
 
 Text input remains a string. Binary input is transported as `Uint8Array` and written to node-pty as a `Buffer`, preserving byte values end to end.
 
+### Renderer remount limitation
+
+Unmounting only `TmuxXterm` keeps the hook, connection, and confirmed location alive. Unrendered output is buffered with bounded backpressure and acknowledged only when rendered; abandoned in-flight renderer writes are settled once on detach. Remounting flushes pending bytes, fits the renderer, and requests a full tmux redraw through the same attached client. Unmount the component that owns the hook to dispose the connection.
+
+**Remount preserves the connection and location, not the xterm instance.** Attachment resets the new renderer, hands it pending output, fits/reports dimensions, then sends a redraw request. It does not wait for buffered writes to finish before requesting redraw. The server runs `tmux refresh-client -t <client>` for the same PTY client; repaint bytes arrive through the existing ordered stream, not a separate state snapshot.
+
+A redraw can restore visible text without restoring all terminal state. With tmux 3.6a, remounting repainted the screen but lost mouse reporting, paste handling, and application-key modes in the new xterm. Already acknowledged bytes are not replayed, including prefixes of partially parsed escape sequences. Preserving the transport during StrictMode's development effect replay likewise does not preserve a discarded xterm's state. Complete renderer-state restoration is not implemented.
+
+Keep the renderer mounted when switching or hiding views, retaining its usable dimensions:
+
+```tsx
+<TmuxXterm
+  terminal={terminal}
+  active={visible}
+  style={{ visibility: visible ? "visible" : "hidden" }}
+/>
+```
+
+The existing emulator continues processing output while hidden. If it has already been destroyed, replacing the stream and explicitly calling `goTo` creates a fresh attachment instead of relying on redraw to restore input modes; this changes the native client identity.
+
 ## Synchronized output
 
 Enable tmux's `sync` terminal feature for the terminal type used by Overmux. This is important for fullscreen TUIs that emit atomic frames with synchronized output (`CSI ?2026 h/l`). Without the feature, tmux forwards a frame incrementally and xterm may visibly paint a partial screen before the rest arrives.

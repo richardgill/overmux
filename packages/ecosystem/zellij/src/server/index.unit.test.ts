@@ -18,7 +18,6 @@ describe("Zellij public API", () => {
       "./client",
       "./react",
       "./install",
-      "./styles.css",
       "./shared",
       "./server",
     ]);
