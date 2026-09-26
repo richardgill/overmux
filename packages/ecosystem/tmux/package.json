@@ -1,6 +1,6 @@
 {
   "name": "@overmux/tmux",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "license": "MIT",
   "description": "Reusable tmux backend, state, operations, and terminal stream for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/tmux",
