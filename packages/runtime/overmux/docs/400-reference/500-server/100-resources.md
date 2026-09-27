@@ -73,6 +73,31 @@ When the subscription ends, Overmux calls the cleanup function returned by `subs
 
 The React code stays the same: `useResource({ id: "ls" })`.
 
+### Asynchronous setup
+
+`subscribe` can be synchronous or asynchronous. Both forms return a cleanup function. For example, replace the `ls` resource's `subscribe` handler to resolve the directory's canonical path before watching it:
+
+```ts
+import { watch } from "node:fs";
+import { realpath } from "node:fs/promises";
+
+// Inside the resource definition:
+subscribe: async (_input, invalidate, context) => {
+  const directory = await realpath("/");
+  // The subscription may have ended while resolving the path.
+  context.signal.throwIfAborted();
+
+  const watcher = watch(directory, { signal: context.signal }, () => {
+    invalidate();
+  });
+  return () => watcher.close();
+},
+```
+
+`context.signal` is an `AbortSignal` that Overmux aborts when the client unsubscribes, disconnects, or the server shuts down. Cancellation does not automatically stop an async function: pass the signal to APIs that support it and check it after awaiting setup. Here, `realpath` does not accept a signal, so `throwIfAborted()` prevents starting a watcher if cancellation happened during that work.
+
+Overmux calls the returned cleanup function once, even if setup finishes after cancellation. Cleanup may also be asynchronous. In this example, the signal can close the watcher before Overmux calls cleanup; `watcher.close()` is safe to call again. If setup throws before returning cleanup, your handler must release any resources it already acquired.
+
 ## Derived
 
 Derived resources compute a value from other resources.
