@@ -69,7 +69,8 @@ export const runGit = (
         timeout: 30_000,
         signal,
       },
-      (error, stdout, stderr) => {
+      async (error, stdout, stderr) => {
+        await closed;
         if (!error) {
           resolve(stdout);
         } else {
@@ -81,6 +82,12 @@ export const runGit = (
         }
       },
     );
+    // Abort invokes execFile's callback before termination. Wait for close (exit
+    // plus stdio cleanup), even when the callback runs during that same event,
+    // so a cancelled mutation cannot release its queue while Git is still alive.
+    const closed = new Promise<void>((resolve) => {
+      child.once("close", () => resolve());
+    });
     // An aborted/failed process may close stdin before a supplied input is written.
     child.stdin?.on("error", () => undefined);
     child.stdin?.end(input);

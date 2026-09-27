@@ -4,7 +4,7 @@ title: Git (experimental)
 
 > **Experimental:** compatibility is not guaranteed.
 
-`@overmux/git` provides live, read-only Git data. It’s designed for building your own Git diff or PR review UI.
+`@overmux/git` provides live Git status and diffs, plus optional operations for staging, unstaging, and discarding changes. Use it to build your own Git diff or review UI.
 
 ## Installation
 
@@ -12,6 +12,154 @@ title: Git (experimental)
 cd ~/.config/overmux
 pnpm add @overmux/git
 ```
+
+## Resources and operations
+
+**Resources** provide read-only data and update automatically when the repository changes:
+
+- `gitChanges` lists changed files, with optional diff hunks or full contents.
+- `gitDiff` returns one file’s complete contents and diff hunks.
+
+**Operations** modify the repository:
+
+- `stage` stages selected files.
+- `unstage` unstages selected files without changing their working copies.
+- `discard` discards unstaged edits or permanently deletes selected untracked files.
+- `applyIndexPatch` applies a patch to staging, or reverses one to unstage selected edits.
+
+## Operations
+
+### Register operations
+
+Add `gitOperationHandlers` to your server configuration:
+
+```ts title="overmux.config.ts"
+import { defineOvermuxConfig } from "overmux";
+import { gitOperationHandlers } from "@overmux/git/server";
+
+export default defineOvermuxConfig({
+  // ...your existing configuration
+  server: {
+    operations: {
+      ...gitOperationHandlers({
+        allowedRoots: ["/home/me/code"],
+        permissions: {
+          stage: true,
+          unstage: true,
+          discard: true,
+          applyIndexPatch: true,
+        },
+      }),
+    },
+  },
+});
+```
+
+`allowedRoots` restricts operations to repositories within those directories on the server machine. Permissions default to `false`; you can enable only the operations your Overmux needs.
+
+### Stage files
+
+Stage selected files, including new files and deletions. 
+
+Import `useOperation` from your Overmux’s [typed hooks module](/docs/reference/client/api#createovermuxhooks):
+
+```ts
+import { useOperation } from "./overmux";
+
+// Inside your component:
+const stage = useOperation({ id: "stage" });
+
+// Inside your event handler:
+await stage.mutateAsync({
+  repoRoot: "/home/me/code/app",
+  files: ["src/app.ts"],
+});
+```
+
+`repoRoot` is the absolute repository path on the server machine. `files` contains repository-relative paths.
+
+### Unstage files
+
+Unstage selected files without changing their working copies or unrelated staged changes.
+
+```ts
+import { useOperation } from "./overmux";
+
+// Inside your component:
+const unstage = useOperation({ id: "unstage" });
+
+// Inside your event handler:
+await unstage.mutateAsync({
+  repoRoot: "/home/me/code/app",
+  files: ["src/app.ts"],
+});
+```
+
+### Discard changes
+
+Discard unstaged edits to selected files. Tracked files are restored from the index (staging area), preserving staged changes.
+
+**Untracked files and directories are permanently deleted.** Ignored and unselected files are retained. Ask for confirmation in your Overmux before calling this operation.
+
+Conflicted, unchanged, staged-only, and ignored-only selections are rejected before any changes are made. For tracked files, select individual files rather than directories.
+
+```ts
+import { useOperation } from "./overmux";
+
+// Inside your component:
+const discard = useOperation({ id: "discard" });
+
+// Inside your event handler, after confirmation:
+await discard.mutateAsync({
+  repoRoot: "/home/me/code/app",
+  files: ["src/app.ts", "scratch-output"],
+});
+```
+
+### Apply a patch to staging
+
+Use `createGitPatch` to convert a [`gitDiff`](#gitdiff) result into a patch, then apply it to staging. Working files are unchanged.
+
+Here, `diff` is a successful `gitDiff` subscription:
+
+```ts
+import { createGitPatch } from "@overmux/git/shared";
+import { useOperation } from "./overmux";
+
+// Inside your component:
+const applyIndexPatch = useOperation({ id: "applyIndexPatch" });
+
+// Inside your event handler:
+const patch = createGitPatch({ diff: diff.data });
+
+await applyIndexPatch.mutateAsync({
+  repoRoot: "/home/me/code/app",
+  patch,
+});
+```
+
+Use an **index → working tree** comparison for staging. To unstage, use **HEAD → index** and pass `reverse: true`:
+
+```ts
+await applyIndexPatch.mutateAsync({
+  repoRoot: "/home/me/code/app",
+  patch,
+  reverse: true,
+});
+```
+
+#### Create a patch
+
+`createGitPatch` includes every hunk by default. To include only some hunks, pass them explicitly:
+
+```ts
+const patch = createGitPatch({
+  diff: diff.data,
+  hunks: selectedHunks,
+});
+```
+
+The helper creates text patches without modifying the repository. Use `stage` or `unstage` for binary files and changes without text hunks.
 
 ## Resources
 

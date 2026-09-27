@@ -1,6 +1,8 @@
 // Environment-neutral contracts for independent named-change and selected-file resources.
 import { z } from "zod";
 
+export { createGitPatch } from "./patch";
+
 // Example: "/home/me/code/app"
 export const absolutePathSchema = z
   .string()
@@ -35,6 +37,44 @@ export const gitResourceOptionsSchema = z
     allowedRoots: z.array(absolutePathSchema).min(1).readonly().optional(),
   })
   .strict();
+
+export const gitOperationOptionsSchema = z
+  .object({
+    allowedRoots: z.array(absolutePathSchema).min(1).readonly(),
+    permissions: z
+      .object({
+        stage: z.boolean().optional(),
+        unstage: z.boolean().optional(),
+        discard: z.boolean().optional(),
+        applyIndexPatch: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const gitFilesInputSchema = z
+  .object({
+    repoRoot: absolutePathSchema,
+    files: z.array(gitFileSchema).min(1),
+  })
+  .strict();
+
+export const gitApplyIndexPatchInputSchema = z
+  .object({
+    repoRoot: absolutePathSchema,
+    patch: z.string().min(1),
+    reverse: z.boolean().default(false),
+  })
+  .strict();
+
+export const gitOperationResultSchema = z.null();
+
+export type GitOperationOptions = z.infer<typeof gitOperationOptionsSchema>;
+export type GitFilesInput = z.infer<typeof gitFilesInputSchema>;
+export type GitApplyIndexPatchInput = z.infer<
+  typeof gitApplyIndexPatchInputSchema
+>;
 
 export const gitBranchSchema = z
   .object({

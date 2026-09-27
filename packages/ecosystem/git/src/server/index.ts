@@ -12,7 +12,8 @@ import { authorizeRepository } from "./repository";
 import { readChanges, readDiff } from "./reads";
 import { watchRepository } from "./watchers";
 
-export type { GitResourceOptions } from "../shared";
+export type { GitResourceOptions, GitOperationOptions } from "../shared";
+export { gitOperationHandlers } from "./operations";
 
 type GitResourceState = {
   allowedRoots: readonly string[];

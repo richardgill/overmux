@@ -2,7 +2,7 @@
   "name": "@overmux/git",
   "version": "0.0.8",
   "license": "MIT",
-  "description": "Authorized read-only Git status and diff subscriptions for Overmux",
+  "description": "Authorized Git status and diff subscriptions with opt-in mutations for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/git",
   "repository": {
     "type": "git",
