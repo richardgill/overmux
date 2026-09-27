@@ -16,6 +16,7 @@ import {
 } from "fumadocs-ui/components/ui/collapsible";
 import { useEffect, useRef, useState } from "react";
 
+// Adapted from Fumadocs' default TOC: https://github.com/fuma-nama/fumadocs/blob/main/packages/ui/src/components/toc/default.tsx.
 type TableOfContentsProps = {
   container?: ComponentProps<"div">;
   footer?: ReactNode;
