@@ -4,14 +4,16 @@ title: Tmux
 
 `@overmux/tmux` brings tmux sessions, windows, panes, and interactive terminals into your Overmux.
 
+## Requirements
+
+Requires **tmux 3.2 or newer**.
+
 ## Installation
 
 ```sh
 cd ~/.config/overmux
 pnpm add @overmux/tmux
 ```
-
-Tmux must be installed on the machine running your Overmux server.
 
 ## `@overmux/tmux/server`
 

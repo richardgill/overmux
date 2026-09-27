@@ -37,6 +37,7 @@ import {
   type TmuxControlClientOptions,
 } from "./client";
 import type { TmuxControlNotification } from "./parser";
+import { TmuxVersionError } from "./version";
 
 // ASCII Unit Separator preserves spaces in tmux fields, e.g. `$1␟work project␟@2`.
 const separator = "\u001f";
@@ -69,6 +70,7 @@ type RefreshCycle = {
 };
 type StateTracking = {
   current: TmuxState;
+  versionError: TmuxVersionError | undefined;
   listeners: Set<() => void>;
   reconciliationTimer: NodeJS.Timeout | undefined;
 };
@@ -276,6 +278,7 @@ export const defineTmuxControlBackend = (
   });
   const state: StateTracking = {
     current: emptyState(options.id),
+    versionError: undefined,
     listeners: new Set(),
     reconciliationTimer: undefined,
   };
@@ -285,11 +288,15 @@ export const defineTmuxControlBackend = (
     observingControlNotifications: false,
   };
 
-  const publishState = (next: TmuxState) => {
-    if (hasSameSnapshot(state.current, next)) {
+  const publishState = (next: TmuxState, versionError?: TmuxVersionError) => {
+    if (
+      hasSameSnapshot(state.current, next) &&
+      state.versionError?.message === versionError?.message
+    ) {
       return state.current;
     }
     state.current = next;
+    state.versionError = versionError;
     state.listeners.forEach((listener) => listener());
     return state.current;
   };
@@ -331,7 +338,14 @@ export const defineTmuxControlBackend = (
       if (signal?.aborted) {
         throw cause;
       }
-      return publishState(emptyState(options.id));
+      const versionError =
+        cause instanceof TmuxVersionError ? cause : undefined;
+      const disconnected = publishState(emptyState(options.id), versionError);
+      // Unsupported versions must reach resource/operation callers, not look like an absent server.
+      if (versionError) {
+        throw versionError;
+      }
+      return disconnected;
     }
   };
   const refresh = createRefresh(readAndPublishState);
@@ -342,7 +356,12 @@ export const defineTmuxControlBackend = (
     refresh,
     run,
     socket: options.socket,
-    state: () => state.current,
+    state: () => {
+      if (state.versionError) {
+        throw state.versionError;
+      }
+      return state.current;
+    },
     subscribeNotifications: (listener) => {
       ensureControlNotifications();
       notifications.listeners.add(listener);

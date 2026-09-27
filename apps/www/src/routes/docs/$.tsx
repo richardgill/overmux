@@ -19,6 +19,11 @@ import {
   DocsTitle,
   MarkdownCopyButton,
 } from "fumadocs-ui/layouts/docs/page";
+import { TOCProvider } from "fumadocs-ui/layouts/docs/page/slots/toc";
+import {
+  DocumentationTableOfContents,
+  DocumentationTableOfContentsPopover,
+} from "@/components/documentation-toc";
 import { InlineCodeTitle } from "@/content/inline-title";
 import { source } from "@/content/source";
 
@@ -142,7 +147,17 @@ const DocsContent = () => {
   const page = Route.useLoaderData();
 
   return (
-    <DocsPage full={page.full} toc={page.toc}>
+    <DocsPage
+      full={page.full}
+      slots={{
+        toc: {
+          main: DocumentationTableOfContents,
+          provider: TOCProvider,
+          popover: DocumentationTableOfContentsPopover,
+        },
+      }}
+      toc={page.toc}
+    >
       <div className="flex items-start justify-between gap-4">
         <DocsTitle>
           <InlineCodeTitle

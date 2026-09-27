@@ -240,9 +240,7 @@ const readNativeTerminalClient = async (backend: TmuxBackend) => {
   const output = await backend.run([
     "list-clients",
     "-F",
-    "#{client_name}|#{client_pid}|#{session_id}|#{client_width}|#{client_height}",
-    "-f",
-    "#{==:#{client_control_mode},0}",
+    "#{?client_control_mode,,#{client_name}|#{client_pid}|#{session_id}|#{client_width}|#{client_height}}",
   ]);
   const [name, pid, sessionId, width, height] = output.trim().split("|");
   if (!name || !pid || !sessionId || !width || !height) {
@@ -338,6 +336,34 @@ describe("real isolated tmux terminal", () => {
       backend.run(["list-sessions", "-F", "#{session_name}"]),
     ).resolves.toBe("source\n");
     expect(terminal.failure).not.toHaveBeenCalled();
+  });
+
+  it("streams shell output before and after reconnecting to a surviving session", async () => {
+    const isolated = createIsolatedTmuxBackend();
+    const sessionId = await createTmuxSession(isolated, "reconnect");
+    const backend = withControlTransport(isolated);
+
+    for (const marker of ["BEFORE", "AFTER"]) {
+      const terminal = await connectTerminal(backend, sessionId);
+      terminal.client.input(`printf '%s%s\\n' '${marker}' '7'\r`);
+
+      await vi.waitFor(
+        () => {
+          const output = Buffer.concat(
+            terminal.messages.flatMap((message) =>
+              message.type === "data" ? [message.bytes] : [],
+            ),
+          ).toString();
+          expect(output).toContain(`${marker}7`);
+        },
+        { timeout: realProcessTimeout },
+      );
+      expect(terminal.failure).not.toHaveBeenCalled();
+      await terminal.disconnect();
+      await expect(backend.run(["has-session", "-t", sessionId])).resolves.toBe(
+        "",
+      );
+    }
   });
 
   it("reports a native switch-client for its PTY client", async () => {
