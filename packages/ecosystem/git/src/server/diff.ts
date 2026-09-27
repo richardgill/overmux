@@ -5,12 +5,7 @@ import { structuredPatch, type StructuredPatchHunk } from "diff";
 
 import type { GitDiff, GitDiffHunk, GitDiffLine } from "../shared";
 
-export type DiffSides = {
-  file: string;
-  previousPath?: string;
-  oldBytes: Buffer | null;
-  newBytes: Buffer | null;
-};
+import type { FileContents } from "./contents";
 export const isBinary = (bytes: Buffer | null) =>
   bytes !== null && (bytes.includes(0) || !isUtf8(bytes));
 
@@ -18,6 +13,11 @@ const lineTexts = (content: string) =>
   (content.match(/[^\n]*\n|[^\n]+$/g) ?? []).map((line) =>
     line.replace(/\r?\n$/, ""),
   );
+
+// V8 can retain a whole file behind a small sliced string. Copy only emitted
+// lines so a hunks-only batch really releases its full-content backing storage.
+const detachedLineText = (text: string) =>
+  Buffer.from(text, "utf8").toString("utf8");
 
 const numberHunk = (
   hunk: StructuredPatchHunk,
@@ -29,19 +29,27 @@ const numberHunk = (
   const lines = hunk.lines.flatMap((line): GitDiffLine[] => {
     if (line.startsWith("-")) {
       return [
-        { kind: "removed", text: oldLines[oldLine - 1]!, oldLine: oldLine++ },
+        {
+          kind: "removed",
+          text: detachedLineText(oldLines[oldLine - 1]!),
+          oldLine: oldLine++,
+        },
       ];
     }
     if (line.startsWith("+")) {
       return [
-        { kind: "added", text: newLines[newLine - 1]!, newLine: newLine++ },
+        {
+          kind: "added",
+          text: detachedLineText(newLines[newLine - 1]!),
+          newLine: newLine++,
+        },
       ];
     }
     if (line.startsWith(" ")) {
       return [
         {
           kind: "context",
-          text: oldLines[oldLine - 1]!,
+          text: detachedLineText(oldLines[oldLine - 1]!),
           oldLine: oldLine++,
           newLine: newLine++,
         },
@@ -62,12 +70,14 @@ const numberHunk = (
   };
 };
 
-export const buildDiff = ({
-  file,
-  previousPath,
-  oldBytes,
-  newBytes,
-}: DiffSides): GitDiff => {
+export const buildFileDiff = ({
+  contents,
+  contextLines,
+}: {
+  contents: FileContents;
+  contextLines: number;
+}): GitDiff => {
+  const { file, previousPath, oldBytes, newBytes } = contents;
   if (oldBytes === null && newBytes === null) {
     throw new Error("Git diff file is absent on both sides");
   }
@@ -96,7 +106,7 @@ export const buildDiff = ({
     undefined,
     undefined,
     {
-      context: 3,
+      context: contextLines,
       stripTrailingCr: false,
       maxEditLength: 20_000,
       timeout: 500,

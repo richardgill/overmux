@@ -1,43 +1,32 @@
-// Public status and selected-file diff subscriptions, with independent access policies.
-// Reads authorize first; subscriptions own cancellation while the registry owns shared watcher handles.
+// Independent resource factories own defaults, authorization, cancellation and terminal subscription failures.
 import type { HandlerContext, SubscriptionResourceDefinition } from "overmux";
-
 import {
-  gitDiffInputSchema,
+  gitChangesInputSchema,
+  gitChangesSchema,
+  gitDiffParamsSchema,
   gitDiffSchema,
   gitResourceOptionsSchema,
-  gitStatusInputSchema,
-  gitStatusSchema,
   type GitResourceOptions,
 } from "../shared";
-import { buildDiff } from "./diff";
-import {
-  authorizeRepository,
-  captureDiff,
-  readStatus,
-  type Repository,
-} from "./repository";
-import { assertRepositoryWatchHealthy, subscribeRepository } from "./watchers";
-
+import { authorizeRepository } from "./repository";
+import { readChanges, readDiff } from "./reads";
+import { watchRepository } from "./watchers";
 export type { GitResourceOptions } from "../shared";
 
-type Access = GitResourceOptions & { failures: Map<string, Set<Error>> };
+type Access = {
+  allowedRoots: readonly string[];
+  failures: Map<string, Set<Error>>;
+};
 const createAccess = (options: GitResourceOptions): Access => ({
-  ...gitResourceOptionsSchema.parse(options),
+  allowedRoots: gitResourceOptionsSchema.parse(options).allowedRoots ?? ["/"],
   failures: new Map(),
 });
-const assertSubscriptionHealthy = (
-  access: Access,
-  requestedRoot: string,
-  repository: Repository,
-) => {
-  const failure = access.failures.get(requestedRoot)?.values().next().value;
+const assertSubscriptionHealthy = (access: Access, repoRoot: string) => {
+  const failure = access.failures.get(repoRoot)?.values().next().value;
   if (failure) {
     throw failure;
   }
-  assertRepositoryWatchHealthy(repository);
 };
-
 const subscribeAuthorized = (
   access: Access,
   repoRoot: string,
@@ -61,98 +50,127 @@ const subscribeAuthorized = (
       }
     }
   };
+  const fail = (cause: unknown) => {
+    if (controller.signal.aborted || failure) {
+      return;
+    }
+    // A transient authorization/startup failure must not turn into a successful
+    // but permanently unwatched read. Keep it scoped to this factory's policy.
+    failure = new Error("Git subscription failed; resubscribe to retry", {
+      cause,
+    });
+    const failures = access.failures.get(repoRoot) ?? new Set<Error>();
+    failures.add(failure);
+    access.failures.set(repoRoot, failures);
+    invalidate();
+  };
   context.signal.addEventListener("abort", dispose, { once: true });
   if (context.signal.aborted) {
     dispose();
   }
-  void authorizeRepository({ ...access, repoRoot, signal: controller.signal })
+  void authorizeRepository({
+    repoRoot,
+    allowedRoots: access.allowedRoots,
+    signal: controller.signal,
+  })
     .then((repository) => {
       if (!controller.signal.aborted) {
-        release = subscribeRepository({ repository, invalidate });
+        release = watchRepository({
+          repository,
+          invalidate,
+          onError: fail,
+          signal: controller.signal,
+        });
         // A synchronous startup failure can invalidate and abort reentrantly.
         if (controller.signal.aborted) {
           release();
         }
       }
     })
-    .catch((cause: unknown) => {
-      if (controller.signal.aborted) {
-        return;
-      }
-      // A transient authorization/startup failure must not turn into a successful
-      // but permanently unwatched read. Keep it scoped to this factory's policy.
-      failure = new Error(
-        "Git subscription could not start; resubscribe to retry",
-        { cause },
-      );
-      const failures = access.failures.get(repoRoot) ?? new Set<Error>();
-      failures.add(failure);
-      access.failures.set(repoRoot, failures);
-      invalidate();
-    });
+    .catch(fail);
   return dispose;
 };
-
-export const gitStatusResource = (
-  options: GitResourceOptions,
+export const gitChangesResource = (
+  options: GitResourceOptions = {},
 ): SubscriptionResourceDefinition<
-  typeof gitStatusInputSchema,
-  typeof gitStatusSchema
+  typeof gitChangesInputSchema,
+  typeof gitChangesSchema
 > => {
   const access = createAccess(options);
   return {
     kind: "subscription",
-    contract: { input: gitStatusInputSchema, output: gitStatusSchema },
+    contract: { input: gitChangesInputSchema, output: gitChangesSchema },
     read: async (input, { signal }) => {
-      const { repoRoot } = gitStatusInputSchema.parse(input);
-      const repository = await authorizeRepository({
-        ...access,
+      const {
         repoRoot,
+        comparisons,
+        detail = "summary",
+        contextLines = 3,
+      } = gitChangesInputSchema.parse(input);
+      assertSubscriptionHealthy(access, repoRoot);
+      const repository = await authorizeRepository({
+        repoRoot,
+        allowedRoots: access.allowedRoots,
         signal,
       });
-      assertSubscriptionHealthy(access, repoRoot, repository);
-      const status = await readStatus({ repository, signal });
-      assertSubscriptionHealthy(access, repoRoot, repository);
-      return status;
+      const result = await readChanges({
+        repository,
+        comparisons,
+        detail,
+        contextLines,
+        signal,
+      });
+      signal.throwIfAborted();
+      assertSubscriptionHealthy(access, repoRoot);
+      return gitChangesSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
       subscribeAuthorized(
         access,
-        gitStatusInputSchema.parse(input).repoRoot,
+        gitChangesInputSchema.parse(input).repoRoot,
         invalidate,
         context,
       ),
   };
 };
-
 export const gitDiffResource = (
-  options: GitResourceOptions,
+  options: GitResourceOptions = {},
 ): SubscriptionResourceDefinition<
-  typeof gitDiffInputSchema,
+  typeof gitDiffParamsSchema,
   typeof gitDiffSchema
 > => {
   const access = createAccess(options);
   return {
     kind: "subscription",
-    contract: { input: gitDiffInputSchema, output: gitDiffSchema },
+    contract: { input: gitDiffParamsSchema, output: gitDiffSchema },
     read: async (input, { signal }) => {
-      const { repoRoot, file, comparison } = gitDiffInputSchema.parse(input);
-      const repository = await authorizeRepository({
-        ...access,
+      const {
         repoRoot,
+        file,
+        comparison,
+        contextLines = 3,
+      } = gitDiffParamsSchema.parse(input);
+      assertSubscriptionHealthy(access, repoRoot);
+      const repository = await authorizeRepository({
+        repoRoot,
+        allowedRoots: access.allowedRoots,
         signal,
       });
-      assertSubscriptionHealthy(access, repoRoot, repository);
-      const sides = await captureDiff({ repository, file, comparison, signal });
+      const result = await readDiff({
+        repository,
+        file,
+        comparison,
+        contextLines,
+        signal,
+      });
       signal.throwIfAborted();
-      const diff = buildDiff(sides);
-      assertSubscriptionHealthy(access, repoRoot, repository);
-      return diff;
+      assertSubscriptionHealthy(access, repoRoot);
+      return gitDiffSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
       subscribeAuthorized(
         access,
-        gitDiffInputSchema.parse(input).repoRoot,
+        gitDiffParamsSchema.parse(input).repoRoot,
         invalidate,
         context,
       ),

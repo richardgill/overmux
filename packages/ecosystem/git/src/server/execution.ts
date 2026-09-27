@@ -16,7 +16,17 @@ export class GitCommandError extends Error {
 export const runGit = (
   root: string,
   args: readonly string[],
-  { signal, input }: { signal?: AbortSignal; input?: string } = {},
+  {
+    signal,
+    input,
+    maxOutputBytes = MAX_CONTENT_BYTES,
+    gitIndexFile,
+  }: {
+    signal?: AbortSignal;
+    input?: string;
+    maxOutputBytes?: number;
+    gitIndexFile?: string;
+  } = {},
 ): Promise<Buffer> =>
   new Promise((resolve, reject) => {
     signal?.throwIfAborted();
@@ -37,6 +47,9 @@ export const runGit = (
         "diff.external=",
         "-c",
         "core.hooksPath=/dev/null",
+        // Split-index writes sharedindex files into the real Git directory even
+        // with GIT_INDEX_FILE set. Private comparison indexes must stay private.
+        ...(gitIndexFile === undefined ? [] : ["-c", "core.splitIndex=false"]),
         "-C",
         root,
         ...args,
@@ -48,8 +61,11 @@ export const runGit = (
           GIT_OPTIONAL_LOCKS: "0",
           GIT_TERMINAL_PROMPT: "0",
           LC_ALL: "C",
+          ...(gitIndexFile === undefined
+            ? {}
+            : { GIT_INDEX_FILE: gitIndexFile }),
         },
-        maxBuffer: MAX_CONTENT_BYTES,
+        maxBuffer: maxOutputBytes,
         timeout: 30_000,
         signal,
       },

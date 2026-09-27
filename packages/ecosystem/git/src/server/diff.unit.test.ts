@@ -1,13 +1,16 @@
 import { describe, expect, it, test as testCases } from "vitest";
 
 import { gitDiffSchema } from "../shared";
-import { buildDiff } from "./diff";
+import { buildFileDiff } from "./diff";
 
 const compare = (oldContent: string | null, newContent: string | null) =>
-  buildDiff({
-    file: "file.txt",
-    oldBytes: oldContent === null ? null : Buffer.from(oldContent),
-    newBytes: newContent === null ? null : Buffer.from(newContent),
+  buildFileDiff({
+    contextLines: 3,
+    contents: {
+      file: "file.txt",
+      oldBytes: oldContent === null ? null : Buffer.from(oldContent),
+      newBytes: newContent === null ? null : Buffer.from(newContent),
+    },
   });
 
 describe("captured text to structured hunks", () => {
@@ -132,10 +135,13 @@ describe("captured text to structured hunks", () => {
     { name: "invalid UTF-8", bytes: Buffer.from([0xff]) },
   ])("$name never exposes corrupted text", ({ bytes }) => {
     expect(
-      buildDiff({
-        file: "binary",
-        oldBytes: Buffer.from("text"),
-        newBytes: bytes,
+      buildFileDiff({
+        contextLines: 3,
+        contents: {
+          file: "binary",
+          oldBytes: Buffer.from("text"),
+          newBytes: bytes,
+        },
       }),
     ).toEqual({
       file: "binary",
@@ -144,6 +150,12 @@ describe("captured text to structured hunks", () => {
       newContent: null,
       hunks: [],
     });
+  });
+
+  it("fails rather than truncating an excessive edit distance", () => {
+    expect(() =>
+      compare("before\n".repeat(20_001), "after\n".repeat(20_001)),
+    ).toThrow("computation limit");
   });
 
   it("rejects absent files", () => {

@@ -1,3 +1,4 @@
+// Adapts one named comparison group to Pierre's file tree without changing resource contracts.
 import type {
   FileTreeRowDecorationContext,
   GitStatusEntry,
@@ -9,21 +10,24 @@ import {
 } from "@pierre/trees/react";
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
 
-import type { GitChange } from "../shared";
+import type {
+  GitChangeSelection,
+  SelectedGitChange,
+} from "./source-control-navigation";
 
 type PierreGitChangeTreeProps = {
-  area: GitChange["area"];
+  group: string;
   changeClassName?: string;
-  changes: GitChange[];
+  changes: SelectedGitChange[];
   flattenEmptyDirectories?: boolean;
-  onSelectChange?: (change: GitChange) => void;
-  selectedChange?: { area: GitChange["area"]; path: string };
+  onSelectChange?: (change: SelectedGitChange) => void;
+  selectedChange?: GitChangeSelection;
   title: string;
 };
 
 type TreeState = {
-  changeByPath: Map<string, GitChange>;
-  onSelectChange?: (change: GitChange) => void;
+  changeByPath: Map<string, SelectedGitChange>;
+  onSelectChange?: (change: SelectedGitChange) => void;
 };
 
 const itemHeight = 28;
@@ -47,7 +51,7 @@ const getVisibleRowCount = (paths: readonly string[]) => {
 };
 
 const usePierreGitChangeTree = ({
-  area,
+  group,
   changes,
   flattenEmptyDirectories,
   onSelectChange,
@@ -58,12 +62,17 @@ const usePierreGitChangeTree = ({
     [changes],
   );
   const paths = useMemo(() => changes.map((change) => change.path), [changes]);
+  // Pierre has no conflict glyph; the row label below keeps that state visible.
   const gitStatus = useMemo<GitStatusEntry[]>(
-    () => changes.map(({ path, status }) => ({ path, status })),
+    () =>
+      changes.map(({ path, status }) => ({
+        path,
+        status: status === "conflicted" ? "modified" : status,
+      })),
     [changes],
   );
   const selectedPath =
-    selectedChange?.area === area ? selectedChange.path : undefined;
+    selectedChange?.group === group ? selectedChange.path : undefined;
   const stateRef = useRef<TreeState>({ changeByPath, onSelectChange });
   stateRef.current = { changeByPath, onSelectChange };
   const syncingSelectionRef = useRef(false);
@@ -88,11 +97,13 @@ const usePierreGitChangeTree = ({
         return null;
       }
       const name = change.path.split("/").at(-1) ?? change.path;
-      return { parts: [{ text: name }], text: name, title: item.path };
+      const label =
+        change.status === "conflicted" ? `${name} (conflicted)` : name;
+      return { parts: [{ text: label }], text: label, title: item.path };
     },
     [],
   );
-  const id = `om-git-${area}-${useId().replaceAll(":", "")}`;
+  const id = `om-git-${group}-${useId().replaceAll(":", "")}`;
   const { model } = useFileTree({
     flattenEmptyDirectories,
     gitStatus,
@@ -167,7 +178,7 @@ export const PierreGitChangeTree = (props: PierreGitChangeTreeProps) => {
       className={["om-git-change-tree", props.changeClassName]
         .filter(Boolean)
         .join(" ")}
-      data-om-area={props.area}
+      data-om-group={props.group}
       data-om-selected={selectedPath ? "true" : undefined}
       id={id}
       model={model}

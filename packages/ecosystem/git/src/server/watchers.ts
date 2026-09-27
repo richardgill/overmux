@@ -69,8 +69,8 @@ const startWatcher = (repository: Repository, entry: WatchEntry) => {
       [
         ...new Set([
           repository.repoRoot,
-          repository.gitDir,
-          repository.commonDir,
+          repository.worktreeGitDir,
+          repository.sharedGitDir,
         ]),
       ],
       {
@@ -79,7 +79,7 @@ const startWatcher = (repository: Repository, entry: WatchEntry) => {
         followSymlinks: false,
         usePolling: false,
         ignored: (path) =>
-          isWithin(join(repository.commonDir, "objects"), path),
+          isWithin(join(repository.sharedGitDir, "objects"), path),
       },
     );
     entry.watcher.on("error", (cause) => failWatcher(entry, cause));
@@ -93,9 +93,11 @@ const startWatcher = (repository: Repository, entry: WatchEntry) => {
     entry.watcher.on("all", (event, path) => {
       if (
         event === "unlinkDir" &&
-        [repository.repoRoot, repository.gitDir, repository.commonDir].includes(
-          path,
-        )
+        [
+          repository.repoRoot,
+          repository.worktreeGitDir,
+          repository.sharedGitDir,
+        ].includes(path)
       ) {
         failWatcher(entry, new Error("Watched Git directory was removed"));
       } else {
@@ -115,20 +117,18 @@ const startWatcher = (repository: Repository, entry: WatchEntry) => {
   }
 };
 
-export const assertRepositoryWatchHealthy = (repository: Repository) => {
-  const error = watchers.get(repository.repoRoot)?.error;
-  if (error) {
-    throw error;
-  }
-};
-
-export const subscribeRepository = ({
+export const watchRepository = ({
   repository,
   invalidate,
+  onError,
+  signal,
 }: {
   repository: Repository;
   invalidate: () => void;
+  onError: (error: Error) => void;
+  signal: AbortSignal;
 }): (() => void) => {
+  signal.throwIfAborted();
   let entry = watchers.get(repository.repoRoot);
   if (!entry) {
     entry = { listeners: new Set(), disposed: false, ready: false };
@@ -136,7 +136,7 @@ export const subscribeRepository = ({
   }
   const owned = entry;
   // Each subscription gets a distinct identity even if callers reuse a callback.
-  const listener = () => invalidate();
+  const listener = () => (owned.error ? onError(owned.error) : invalidate());
   owned.listeners.add(listener);
   if (owned.error || owned.ready) {
     queueMicrotask(() => {
@@ -147,7 +147,8 @@ export const subscribeRepository = ({
   } else if (!owned.watcher) {
     startWatcher(repository, owned);
   }
-  return () => {
+  const dispose = () => {
+    signal.removeEventListener("abort", dispose);
     owned.listeners.delete(listener);
     if (owned.listeners.size === 0 && !owned.disposed) {
       owned.disposed = true;
@@ -155,4 +156,9 @@ export const subscribeRepository = ({
       closeWatcher(owned);
     }
   };
+  signal.addEventListener("abort", dispose, { once: true });
+  if (signal.aborted) {
+    dispose();
+  }
+  return dispose;
 };

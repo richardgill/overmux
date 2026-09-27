@@ -1,3 +1,4 @@
+// Displays caller-named Git comparison groups and an independently supplied selected-file diff.
 import "./styles.css";
 
 import { useCommand } from "overmux/client";
@@ -17,9 +18,10 @@ import {
   orderedChanges,
   sameChange,
   type GitChangeSelection,
+  type SelectedGitChange,
   type SourceControlCommandHandles,
 } from "./source-control-navigation";
-import type { GitChange, GitDiff, GitStatus } from "../shared";
+import type { GitDiff, GitChanges } from "../shared";
 
 export const registerGitDiffTheme = registerCustomTheme;
 
@@ -44,17 +46,11 @@ export type GitSourceControlSidebarProps = {
   error?: Error | string;
   flattenEmptyDirectories?: boolean;
   loading?: boolean;
-  onSelectChange?: (change: GitChange) => void;
+  onSelectChange?: (change: SelectedGitChange) => void;
   selectedChange?: GitChangeSelection;
-  status?: GitStatus;
+  status?: GitChanges;
   style?: OvermuxStyle;
 };
-
-const groups = [
-  { area: "conflict", title: "Conflicts" },
-  { area: "unstaged", title: "Unstaged" },
-  { area: "staged", title: "Staged" },
-] as const;
 
 export const GitSourceControlSidebar = ({
   className,
@@ -82,7 +78,10 @@ export const GitSourceControlSidebar = ({
       </p>
     );
   }
-  if (!status || !status.changes.length) {
+  if (
+    !status ||
+    !Object.values(status.changes).some((changes) => changes.length)
+  ) {
     return <p className={classNames?.empty}>{emptyState ?? "No changes."}</p>;
   }
   return (
@@ -101,25 +100,25 @@ export const GitSourceControlSidebar = ({
       >
         {status.branch.name ?? status.repoRoot}
       </header>
-      {groups.map(({ area, title }) => {
-        const changes = status.changes.filter((change) => change.area === area);
+      {Object.entries(status.changes).map(([group, entries]) => {
+        const changes = entries.map((change) => ({ ...change, group }));
         return changes.length ? (
           <section
             className={joinClassNames(
               "om-git-changes-group",
               classNames?.group,
             )}
-            key={area}
+            key={group}
           >
-            <h2>{title}</h2>
+            <h2>{group}</h2>
             <PierreGitChangeTree
-              area={area}
+              group={group}
               changeClassName={classNames?.change}
               changes={changes}
               flattenEmptyDirectories={flattenEmptyDirectories}
               onSelectChange={onSelectChange}
               selectedChange={selectedChange}
-              title={title}
+              title={group}
             />
           </section>
         ) : null;
@@ -163,12 +162,12 @@ export type SourceControlViewProps = Omit<
   diffStyle?: GitDiffStyle;
   maxSidebarWidth?: number;
   minSidebarWidth?: number;
-  onSelectChange?: (change: GitChange) => void;
+  onSelectChange?: (change: SelectedGitChange) => void;
   onSidebarWidthChange?: (width: number) => void;
   renderDiffFileHeader?: (diff: GitDiff) => ReactNode;
   selectedChange?: GitChangeSelection;
   sidebarWidth?: number;
-  status?: GitStatus;
+  status?: GitChanges;
   style?: OvermuxStyle;
 };
 
@@ -234,7 +233,7 @@ type GitDiffPaneProps = {
   onActive: () => void;
   paneRef: RefObject<HTMLDivElement | null>;
   renderDiffFileHeader?: (diff: GitDiff) => ReactNode;
-  selectedChange?: GitChange;
+  selectedChange?: SelectedGitChange;
 };
 
 const GitDiffPane = ({
@@ -284,7 +283,7 @@ const GitDiffPane = ({
           <article
             className={joinClassNames("om-git-diff-file", diffClassNames?.file)}
             data-om-binary={selectedDiff.binary || undefined}
-            data-om-git-file={`${selected.area}:${selected.path}`}
+            data-om-git-file={`${selected.group}:${selected.path}`}
           >
             <header
               className={joinClassNames(
@@ -302,7 +301,7 @@ const GitDiffPane = ({
               <p className={diffClassNames?.empty}>No textual changes.</p>
             ) : (
               <PierreFileDiff
-                cacheKey={`${selected.area}:${selected.path}`}
+                cacheKey={`${selected.group}:${selected.path}`}
                 className={joinClassNames(
                   "om-git-diff-patch",
                   diffClassNames?.patch,
@@ -360,7 +359,7 @@ export const SourceControlView = ({
   const currentChangeRef = useRef(currentChange);
   currentChangeRef.current = currentChange;
   const selectChange = useCallback(
-    (change: GitChange) => {
+    (change: SelectedGitChange) => {
       currentChangeRef.current = change;
       if (selectedChange === undefined) {
         setUncontrolledChange(change);

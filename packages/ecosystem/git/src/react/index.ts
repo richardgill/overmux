@@ -1,3 +1,4 @@
+// Public React views compose named comparisons with independent selected-file diff results.
 export {
   GitSourceControlSidebar,
   registerGitDiffTheme,
@@ -17,5 +18,6 @@ export {
   orderedChanges,
   sourceControlCommands,
   type GitChangeSelection,
+  type SelectedGitChange,
   type SourceControlCommandHandles,
 } from "./source-control-navigation";

@@ -11,16 +11,33 @@ vi.mock("overmux/client", () => ({
 }));
 
 import { SourceControlView } from "./index";
-import type { GitChange, GitStatus } from "../shared";
+import type { GitChanges } from "../shared";
+import type { SelectedGitChange } from "./source-control-navigation";
 
-const changes: GitChange[] = [
-  { area: "unstaged", binary: false, path: "a.ts", status: "modified" },
-  { area: "staged", binary: false, path: "a.ts", status: "modified" },
-  { area: "unstaged", binary: true, path: "image.png", status: "modified" },
+const change = (
+  group: string,
+  path: string,
+  binary = false,
+): SelectedGitChange => ({
+  group,
+  path,
+  binary,
+  status: "modified",
+  lineStats: null,
+  diffParams: {
+    repoRoot: "/repo",
+    file: path,
+    comparison: { base: { kind: "index" }, target: { kind: "workingTree" } },
+  },
+});
+const changes = [
+  change("unstaged", "a.ts"),
+  change("staged", "a.ts"),
+  change("unstaged", "image.png", true),
 ];
-const status: GitStatus = {
+const status: GitChanges = {
   branch: { ahead: 0, behind: 0, name: "main", unborn: false, upstream: null },
-  changes,
+  changes: { unstaged: [changes[0]!, changes[2]!], staged: [changes[1]!] },
   repoRoot: "/repo",
 };
 const diff = (file: string, newContent: string | null, binary = false) => ({
@@ -32,7 +49,7 @@ const diff = (file: string, newContent: string | null, binary = false) => ({
 });
 
 const ControlledView = () => {
-  const [selected, setSelected] = useState<GitChange>(changes[0]!);
+  const [selected, setSelected] = useState<SelectedGitChange>(changes[0]!);
   const [currentDiff, setCurrentDiff] = useState(diff("a.ts", "after\n"));
   return (
     <>
@@ -80,8 +97,8 @@ describe("SourceControlView", () => {
   test("renders read-only areas, navigates selected files, and replaces a live diff", async () => {
     await act(async () => root.render(<ControlledView />));
 
-    expect(container.textContent).toContain("Unstaged");
-    expect(container.textContent).toContain("Staged");
+    expect(container.textContent).toContain("unstaged");
+    expect(container.textContent).toContain("staged");
     expect(
       container.querySelector("[data-om-git-file]")?.textContent,
     ).not.toContain("Stage");
@@ -133,7 +150,7 @@ describe("SourceControlView", () => {
   });
 
   test("falls back to an available selection for both sidebar and diff", async () => {
-    const availableStatus = { ...status, changes: [changes[0]!] };
+    const availableStatus = { ...status, changes: { unstaged: [changes[0]!] } };
     await act(async () =>
       root.render(
         <SourceControlView
@@ -152,7 +169,7 @@ describe("SourceControlView", () => {
     ).toBe("unstaged:a.ts");
     expect(
       container
-        .querySelector('[data-om-area="unstaged"]')
+        .querySelector('[data-om-group="unstaged"]')
         ?.getAttribute("data-om-selected"),
     ).toBe("true");
   });

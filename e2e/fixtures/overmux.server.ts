@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import { defineOvermuxServer } from "overmux";
-import { gitDiffResource, gitStatusResource } from "@overmux/git/server";
+import { gitDiffResource, gitChangesResource } from "@overmux/git/server";
 import {
   definePiAgents,
   piOperationHandlers,
@@ -113,7 +113,7 @@ export default defineOvermuxServer({
       dependencies: { piSessions: "piPaneSessions", tmux: "tmuxState" },
       kind: "derived",
     },
-    gitStatus: gitStatusResource(gitAccess),
+    gitChanges: gitChangesResource(gitAccess),
     gitDiff: gitDiffResource(gitAccess),
   },
   streams: {

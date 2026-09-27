@@ -1,12 +1,13 @@
+// Orders caller-named comparison groups and preserves group/path selection identity.
 import { prepareFileTreeInput } from "@pierre/trees";
 import { defineCommandRegistry } from "overmux/client";
 
-import type { GitChange, GitStatus } from "../shared";
+import type { GitFileChange, GitChanges } from "../shared";
 
 type Direction = 1 | -1;
 
-export type GitChangeSelection = { area: GitChange["area"]; path: string };
-const areaOrder = ["conflict", "unstaged", "staged"] as const;
+export type GitChangeSelection = { group: string; path: string };
+export type SelectedGitChange = GitFileChange & { group: string };
 
 export const sourceControlCommands = defineCommandRegistry<unknown>()({
   "sourceControl.nextFile": { title: "Next changed file" },
@@ -23,15 +24,15 @@ const sortPaths = <T extends { path: string }>(changes: readonly T[]) => {
   );
 };
 
-export const orderedChanges = (status?: GitStatus) =>
-  areaOrder.flatMap((area) =>
-    sortPaths(status?.changes.filter((change) => change.area === area) ?? []),
+export const orderedChanges = (status?: GitChanges): SelectedGitChange[] =>
+  Object.entries(status?.changes ?? {}).flatMap(([group, changes]) =>
+    sortPaths(changes).map((change) => ({ ...change, group })),
   );
 
 export const sameChange = (
   change: GitChangeSelection,
   selection?: GitChangeSelection,
-) => change.area === selection?.area && change.path === selection?.path;
+) => change.group === selection?.group && change.path === selection?.path;
 
 const cycleIndex = (index: number, length: number, direction: Direction) =>
   (index + direction + length) % length;
@@ -43,7 +44,7 @@ export const navigateChange = ({
 }: {
   direction: Direction;
   selectedChange?: GitChangeSelection;
-  status?: GitStatus;
+  status?: GitChanges;
 }) => {
   const entries = orderedChanges(status);
   if (entries.length === 0) {
