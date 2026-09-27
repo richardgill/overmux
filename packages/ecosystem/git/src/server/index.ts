@@ -104,7 +104,7 @@ export const gitChangesResource = (
       const {
         repoRoot,
         comparisons,
-        detail = "summary",
+        detailLevel = "summary",
         contextLines = 3,
       } = gitChangesInputSchema.parse(input);
       assertSubscriptionHealthy(access, repoRoot);
@@ -116,7 +116,7 @@ export const gitChangesResource = (
       const result = await readChanges({
         repository,
         comparisons,
-        detail,
+        detailLevel,
         contextLines,
         signal,
       });

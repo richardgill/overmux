@@ -80,7 +80,7 @@ export const GitSourceControlSidebar = ({
   }
   if (
     !status ||
-    !Object.values(status.changes).some((changes) => changes.length)
+    !Object.values(status.comparisons).some((changes) => changes.length)
   ) {
     return <p className={classNames?.empty}>{emptyState ?? "No changes."}</p>;
   }
@@ -100,7 +100,7 @@ export const GitSourceControlSidebar = ({
       >
         {status.branch.name ?? status.repoRoot}
       </header>
-      {Object.entries(status.changes).map(([group, entries]) => {
+      {Object.entries(status.comparisons).map(([group, entries]) => {
         const changes = entries.map((change) => ({ ...change, group }));
         return changes.length ? (
           <section

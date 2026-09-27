@@ -15,6 +15,7 @@ Keep all runtime implementation private inside `overmux`; only `.`, `./client`, 
 Explicitly name user-facing exports; do not use `export *` in public API entry points.
 When a package exposes public subpaths, mirror them under `src/<subpath>/`; keep implementation beneath its owning export and point aliases at the same built entry rather than adding forwarding barrels.
 Do not add `description` frontmatter to documentation pages unless explicitly asked.
+Include required imports in documentation code examples; explain or link the setup for application-owned imports rather than leaving their source implicit.
 Package-owned `docs/*.md` files are canonical and portable; `apps/www` stages them for Fumadocs rather than owning copies.
 Register each documentation source and its website navigation in `docs.config.ts`; generated Fumadocs `meta.json` stays under `apps/www` and out of published packages.
 All future releases must use patch bumps, including npm packages and the desktop; do not introduce minor or major changesets unless explicitly requested.

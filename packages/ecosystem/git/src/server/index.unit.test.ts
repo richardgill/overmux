@@ -102,6 +102,15 @@ describe("public named Git resources", () => {
     await git(repoRoot, ["add", "."]);
     await writeFile(join(repoRoot, "file.txt"), "one\n");
     const result = gitChangesSchema.parse(await readChanges(repoRoot));
+    expect(result).not.toHaveProperty("changes");
+    expect(
+      gitChangesSchema.safeParse({ ...result, changes: result.comparisons })
+        .success,
+    ).toBe(false);
+    const obsoleteInput = { ...input(repoRoot), detail: "full" };
+    await expect(
+      gitChangesResource().read(obsoleteInput, context()),
+    ).rejects.toThrow();
     expect(result.branch).toEqual({
       name: "main",
       upstream: null,
@@ -109,11 +118,11 @@ describe("public named Git resources", () => {
       behind: 0,
       unborn: false,
     });
-    expect(Object.keys(result.changes)).toEqual(Object.keys(comparisons));
-    expect(result.changes.combined).toEqual([]);
-    expect(result.changes.staged).toHaveLength(1);
-    expect(result.changes.unstaged).toHaveLength(1);
-    const change = result.changes.unstaged![0]!;
+    expect(Object.keys(result.comparisons)).toEqual(Object.keys(comparisons));
+    expect(result.comparisons.combined).toEqual([]);
+    expect(result.comparisons.staged).toHaveLength(1);
+    expect(result.comparisons.unstaged).toHaveLength(1);
+    const change = result.comparisons.unstaged![0]!;
     expect(change).toMatchObject({
       path: "file.txt",
       lineStats: { added: 1, deleted: 1 },
@@ -136,9 +145,9 @@ describe("public named Git resources", () => {
     expect(await readFile(join(repoRoot, ".git", "index"))).toEqual(
       indexBefore,
     );
-    expect(recreated.changes.combined).toEqual([]);
-    expect(recreated.changes.staged![0]?.status).toBe("deleted");
-    expect(recreated.changes.unstaged![0]?.status).toBe("untracked");
+    expect(recreated.comparisons.combined).toEqual([]);
+    expect(recreated.comparisons.staged![0]?.status).toBe("deleted");
+    expect(recreated.comparisons.unstaged![0]?.status).toBe("untracked");
     expect((await git(repoRoot, ["ls-files"])).stdout).toBe("");
     const labels = ["__proto__", "constructor"];
     const named = await gitChangesResource().read(
@@ -150,14 +159,14 @@ describe("public named Git resources", () => {
       },
       context(),
     );
-    expect(Object.keys(named.changes)).toEqual(labels);
+    expect(Object.keys(named.comparisons)).toEqual(labels);
     await expect(
       gitChangesResource().read(input(repoRoot), context(AbortSignal.abort())),
     ).rejects.toThrow();
   });
   testCases.each(["summary", "hunks", "full"] as const)(
     "returns only requested %s detail and preserves context zero",
-    async (detail) => {
+    async (detailLevel) => {
       const repoRoot = await createRepository();
       await writeFile(join(repoRoot, "file.txt"), "one\ntwo\nthree\n");
       await git(repoRoot, ["add", "."]);
@@ -166,22 +175,22 @@ describe("public named Git resources", () => {
         {
           repoRoot,
           comparisons: { custom: unstaged },
-          detail,
+          detailLevel,
           contextLines: 0,
         },
         context(),
       );
-      const change = result.changes.custom![0]!;
+      const change = result.comparisons.custom![0]!;
       expect(change.lineStats).toEqual({ added: 1, deleted: 1 });
       expect(change.diffParams.contextLines).toBe(0);
-      if (detail === "summary") {
+      if (detailLevel === "summary") {
         expect(change).not.toHaveProperty("diff");
       } else {
         expect(change.diff?.hunks[0]?.lines.map((line) => line.kind)).toEqual([
           "removed",
           "added",
         ]);
-        if (detail === "hunks") {
+        if (detailLevel === "hunks") {
           expect(change.diff).not.toHaveProperty("oldContent");
         } else {
           expect(change.diff).toMatchObject({
@@ -220,17 +229,17 @@ describe("public named Git resources", () => {
       target: { kind: "workingTree" },
     };
     const result = await gitChangesResource().read(
-      { repoRoot, comparisons: { historical, merge }, detail: "full" },
+      { repoRoot, comparisons: { historical, merge }, detailLevel: "full" },
       context(),
     );
-    expect(result.changes.historical![0]).toMatchObject({
+    expect(result.comparisons.historical![0]).toMatchObject({
       path: "renamed.txt",
       previousPath: "file.txt",
       status: "renamed",
       lineStats: { added: 1, deleted: 1 },
       diff: { oldContent: original, newContent: edited },
     });
-    expect(result.changes.merge![0]?.previousPath).toBe("file.txt");
+    expect(result.comparisons.merge![0]?.previousPath).toBe("file.txt");
     expect(await readDiff(repoRoot, "file.txt", historical)).toMatchObject({
       oldContent: original,
       newContent: null,
@@ -246,7 +255,7 @@ describe("public named Git resources", () => {
     await git(repoRoot, ["commit", "-am", "other"]);
     await git(repoRoot, ["checkout", "main"]);
     await expect(git(repoRoot, ["merge", "other"])).rejects.toThrow();
-    expect((await readChanges(repoRoot)).changes.unstaged).toContainEqual(
+    expect((await readChanges(repoRoot)).comparisons.unstaged).toContainEqual(
       expect.objectContaining({ status: "conflicted", lineStats: null }),
     );
     expect(await readDiff(repoRoot, "renamed.txt", historical)).toMatchObject({
@@ -254,7 +263,7 @@ describe("public named Git resources", () => {
     });
     await expect(
       gitChangesResource().read(
-        { ...input(repoRoot), detail: "hunks" },
+        { ...input(repoRoot), detailLevel: "hunks" },
         context(),
       ),
     ).rejects.toThrow("conflicted");
@@ -306,7 +315,7 @@ describe("public named Git resources", () => {
     await writeFile(join(repoRoot, "large"), "text");
     await truncate(join(repoRoot, "large"), 20_000_000);
     const result = await readChanges(repoRoot);
-    expect(result.changes.unstaged).toContainEqual(
+    expect(result.comparisons.unstaged).toContainEqual(
       expect.objectContaining({ path: "large", binary: true, lineStats: null }),
     );
     expect(await readDiff(repoRoot, "empty")).toMatchObject({
@@ -325,7 +334,7 @@ describe("public named Git resources", () => {
     );
     await expect(
       gitChangesResource().read(
-        { ...input(repoRoot), detail: "full" },
+        { ...input(repoRoot), detailLevel: "full" },
         context(),
       ),
     ).rejects.toThrow("exceeded 16000000 bytes");
@@ -342,7 +351,7 @@ describe("public named Git resources", () => {
       "--cacheinfo",
       `160000,${gitObjectId},module`,
     ]);
-    expect((await readChanges(repoRoot)).changes.staged).toContainEqual(
+    expect((await readChanges(repoRoot)).comparisons.staged).toContainEqual(
       expect.objectContaining({ path: "module", lineStats: null }),
     );
     await expect(readDiff(repoRoot, "module", staged)).rejects.toThrow(

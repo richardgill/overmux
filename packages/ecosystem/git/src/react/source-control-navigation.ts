@@ -25,7 +25,7 @@ const sortPaths = <T extends { path: string }>(changes: readonly T[]) => {
 };
 
 export const orderedChanges = (status?: GitChanges): SelectedGitChange[] =>
-  Object.entries(status?.changes ?? {}).flatMap(([group, changes]) =>
+  Object.entries(status?.comparisons ?? {}).flatMap(([group, changes]) =>
     sortPaths(changes).map((change) => ({ ...change, group })),
   );
 

@@ -96,7 +96,7 @@ export const gitChangesInputSchema = z
       (value) => Object.keys(value).length > 0,
       "Expected at least one comparison",
     ),
-    detail: z.enum(["summary", "hunks", "full"]).optional(),
+    detailLevel: z.enum(["summary", "hunks", "full"]).optional(),
     contextLines: contextLinesSchema.optional(),
   })
   .strict();
@@ -204,7 +204,7 @@ export const gitChangesSchema = z
   .object({
     repoRoot: absolutePathSchema,
     branch: gitBranchSchema,
-    changes: namedRecordSchema(z.array(gitFileChangeSchema)),
+    comparisons: namedRecordSchema(z.array(gitFileChangeSchema)),
   })
   .strict();
 export type GitResourceOptions = z.infer<typeof gitResourceOptionsSchema>;

@@ -84,12 +84,12 @@ const changeSummary = (
 export const readChanges = async ({
   repository,
   comparisons,
-  detail,
+  detailLevel,
   contextLines,
   signal,
 }: ReadOptions & {
   comparisons: Record<string, GitComparison>;
-  detail: "summary" | "hunks" | "full";
+  detailLevel: "summary" | "hunks" | "full";
 }): Promise<GitChanges> => {
   const branch = await readBranch({ repository, signal });
   const groups: [string, GitFileChange[]][] = [];
@@ -97,11 +97,11 @@ export const readChanges = async ({
     const files = await readFileComparisons({
       repository,
       comparison,
-      includeStats: detail === "summary",
+      includeStats: detailLevel === "summary",
       signal,
     });
     const changes =
-      detail === "summary"
+      detailLevel === "summary"
         ? files.map((file) =>
             changeSummary(repository, comparison, contextLines, file),
           )
@@ -115,7 +115,7 @@ export const readChanges = async ({
               binary: diff.binary,
               lineStats: computedCounts(diff),
               diff:
-                detail === "hunks"
+                detailLevel === "hunks"
                   ? { hunks: diff.hunks }
                   : {
                       hunks: diff.hunks,
@@ -129,7 +129,7 @@ export const readChanges = async ({
   return {
     repoRoot: repository.repoRoot,
     branch,
-    changes: Object.fromEntries(groups),
+    comparisons: Object.fromEntries(groups),
   };
 };
 export const readDiff = async ({

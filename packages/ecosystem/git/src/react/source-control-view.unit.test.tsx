@@ -37,7 +37,7 @@ const changes = [
 ];
 const status: GitChanges = {
   branch: { ahead: 0, behind: 0, name: "main", unborn: false, upstream: null },
-  changes: { unstaged: [changes[0]!, changes[2]!], staged: [changes[1]!] },
+  comparisons: { unstaged: [changes[0]!, changes[2]!], staged: [changes[1]!] },
   repoRoot: "/repo",
 };
 const diff = (file: string, newContent: string | null, binary = false) => ({
@@ -150,7 +150,10 @@ describe("SourceControlView", () => {
   });
 
   test("falls back to an available selection for both sidebar and diff", async () => {
-    const availableStatus = { ...status, changes: { unstaged: [changes[0]!] } };
+    const availableStatus = {
+      ...status,
+      comparisons: { unstaged: [changes[0]!] },
+    };
     await act(async () =>
       root.render(
         <SourceControlView

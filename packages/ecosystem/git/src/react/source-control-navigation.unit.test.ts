@@ -15,7 +15,7 @@ const change = (path: string): GitFileChange => ({
 });
 const status: GitChanges = {
   branch: { ahead: 0, behind: 0, name: "main", unborn: false, upstream: null },
-  changes: {
+  comparisons: {
     review: [change("b.ts"), change("a.ts")],
     committed: [change("z.ts")],
   },
