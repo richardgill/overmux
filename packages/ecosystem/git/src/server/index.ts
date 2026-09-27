@@ -13,22 +13,30 @@ import { readChanges, readDiff } from "./reads";
 import { watchRepository } from "./watchers";
 export type { GitResourceOptions } from "../shared";
 
-type Access = {
+type GitResourceState = {
   allowedRoots: readonly string[];
-  failures: Map<string, Set<Error>>;
+  subscriptionErrors: Map<string, Set<Error>>;
 };
-const createAccess = (options: GitResourceOptions): Access => ({
+
+const createGitResourceState = (
+  options: GitResourceOptions,
+): GitResourceState => ({
   allowedRoots: gitResourceOptionsSchema.parse(options).allowedRoots ?? ["/"],
-  failures: new Map(),
+  subscriptionErrors: new Map(),
 });
-const assertSubscriptionHealthy = (access: Access, repoRoot: string) => {
-  const failure = access.failures.get(repoRoot)?.values().next().value;
-  if (failure) {
-    throw failure;
+
+const assertSubscriptionHealthy = (
+  state: GitResourceState,
+  repoRoot: string,
+) => {
+  const error = state.subscriptionErrors.get(repoRoot)?.values().next().value;
+  if (error) {
+    throw error;
   }
 };
+
 const subscribeAuthorized = (
-  access: Access,
+  gitResourceState: GitResourceState,
   repoRoot: string,
   invalidate: () => void,
   context: HandlerContext,
@@ -43,13 +51,15 @@ const subscribeAuthorized = (
     context.signal.removeEventListener("abort", dispose);
     release?.();
     if (failure) {
-      const failures = access.failures.get(repoRoot);
-      failures?.delete(failure);
-      if (failures?.size === 0) {
-        access.failures.delete(repoRoot);
+      const subscriptionErrors =
+        gitResourceState.subscriptionErrors.get(repoRoot);
+      subscriptionErrors?.delete(failure);
+      if (subscriptionErrors?.size === 0) {
+        gitResourceState.subscriptionErrors.delete(repoRoot);
       }
     }
   };
+
   const fail = (cause: unknown) => {
     if (controller.signal.aborted || failure) {
       return;
@@ -59,9 +69,10 @@ const subscribeAuthorized = (
     failure = new Error("Git subscription failed; resubscribe to retry", {
       cause,
     });
-    const failures = access.failures.get(repoRoot) ?? new Set<Error>();
-    failures.add(failure);
-    access.failures.set(repoRoot, failures);
+    const subscriptionErrors =
+      gitResourceState.subscriptionErrors.get(repoRoot) ?? new Set<Error>();
+    subscriptionErrors.add(failure);
+    gitResourceState.subscriptionErrors.set(repoRoot, subscriptionErrors);
     invalidate();
   };
   context.signal.addEventListener("abort", dispose, { once: true });
@@ -70,7 +81,7 @@ const subscribeAuthorized = (
   }
   void authorizeRepository({
     repoRoot,
-    allowedRoots: access.allowedRoots,
+    allowedRoots: gitResourceState.allowedRoots,
     signal: controller.signal,
   })
     .then((repository) => {
@@ -90,13 +101,14 @@ const subscribeAuthorized = (
     .catch(fail);
   return dispose;
 };
+
 export const gitChangesResource = (
   options: GitResourceOptions = {},
 ): SubscriptionResourceDefinition<
   typeof gitChangesInputSchema,
   typeof gitChangesSchema
 > => {
-  const access = createAccess(options);
+  const state = createGitResourceState(options);
   return {
     kind: "subscription",
     contract: { input: gitChangesInputSchema, output: gitChangesSchema },
@@ -107,10 +119,10 @@ export const gitChangesResource = (
         detailLevel = "summary",
         contextLines = 3,
       } = gitChangesInputSchema.parse(input);
-      assertSubscriptionHealthy(access, repoRoot);
+      assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
         repoRoot,
-        allowedRoots: access.allowedRoots,
+        allowedRoots: state.allowedRoots,
         signal,
       });
       const result = await readChanges({
@@ -121,25 +133,26 @@ export const gitChangesResource = (
         signal,
       });
       signal.throwIfAborted();
-      assertSubscriptionHealthy(access, repoRoot);
+      assertSubscriptionHealthy(state, repoRoot);
       return gitChangesSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
       subscribeAuthorized(
-        access,
+        state,
         gitChangesInputSchema.parse(input).repoRoot,
         invalidate,
         context,
       ),
   };
 };
+
 export const gitDiffResource = (
   options: GitResourceOptions = {},
 ): SubscriptionResourceDefinition<
   typeof gitDiffParamsSchema,
   typeof gitDiffSchema
 > => {
-  const access = createAccess(options);
+  const state = createGitResourceState(options);
   return {
     kind: "subscription",
     contract: { input: gitDiffParamsSchema, output: gitDiffSchema },
@@ -150,10 +163,10 @@ export const gitDiffResource = (
         comparison,
         contextLines = 3,
       } = gitDiffParamsSchema.parse(input);
-      assertSubscriptionHealthy(access, repoRoot);
+      assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
         repoRoot,
-        allowedRoots: access.allowedRoots,
+        allowedRoots: state.allowedRoots,
         signal,
       });
       const result = await readDiff({
@@ -164,12 +177,12 @@ export const gitDiffResource = (
         signal,
       });
       signal.throwIfAborted();
-      assertSubscriptionHealthy(access, repoRoot);
+      assertSubscriptionHealthy(state, repoRoot);
       return gitDiffSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
       subscribeAuthorized(
-        access,
+        state,
         gitDiffParamsSchema.parse(input).repoRoot,
         invalidate,
         context,
