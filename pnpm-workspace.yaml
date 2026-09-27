@@ -1,4 +1,6 @@
 packages:
+  - fixtures
+  - e2e/fixtures
   - apps/*
   - packages/*/*
   - tooling/*

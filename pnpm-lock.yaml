@@ -253,21 +253,9 @@ importers:
       '@manypkg/get-packages':
         specifier: 'catalog:'
         version: 1.1.3
-      '@overmux/git':
-        specifier: workspace:*
-        version: link:packages/ecosystem/git
-      '@overmux/pi':
-        specifier: workspace:*
-        version: link:packages/ecosystem/pi
-      '@overmux/tmux':
-        specifier: workspace:*
-        version: link:packages/ecosystem/tmux
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.20
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.17
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.0.2(vite@8.2.2(@types/node@22.19.20)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -277,18 +265,9 @@ importers:
       knip:
         specifier: 'catalog:'
         version: 6.16.1
-      overmux:
-        specifier: workspace:*
-        version: link:packages/runtime/overmux
       prettier:
         specifier: 'catalog:'
         version: 3.8.3
-      react:
-        specifier: 'catalog:'
-        version: 19.2.3
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.2.3(react@19.2.3)
       turbo:
         specifier: 'catalog:'
         version: 2.9.17
@@ -441,6 +420,52 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(@vitest/browser-preview@4.1.10)(@vitest/coverage-v8@4.1.10)(happy-dom@20.11.6)(vite@8.2.2(@types/node@22.19.20)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  e2e/fixtures:
+    dependencies:
+      '@overmux/git':
+        specifier: workspace:*
+        version: link:../../packages/ecosystem/git
+      '@overmux/pi':
+        specifier: workspace:*
+        version: link:../../packages/ecosystem/pi
+      '@overmux/tmux':
+        specifier: workspace:*
+        version: link:../../packages/ecosystem/tmux
+      overmux:
+        specifier: workspace:*
+        version: link:../../packages/runtime/overmux
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+
+  fixtures:
+    dependencies:
+      '@overmux/git':
+        specifier: workspace:*
+        version: link:../packages/ecosystem/git
+      '@overmux/pi':
+        specifier: workspace:*
+        version: link:../packages/ecosystem/pi
+      '@overmux/tmux':
+        specifier: workspace:*
+        version: link:../packages/ecosystem/tmux
+      overmux:
+        specifier: workspace:*
+        version: link:../packages/runtime/overmux
+      react:
+        specifier: 'catalog:'
+        version: 19.2.3
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.3(react@19.2.3)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.17
 
   packages/ecosystem/git:
     dependencies:

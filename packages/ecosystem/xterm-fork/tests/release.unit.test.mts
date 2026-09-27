@@ -157,28 +157,30 @@ test("authoring only permits patch notes and produces consumable Changesets", (t
     "User-facing note.",
   );
 });
-test("a rejected build removes stale workspace outputs and tarball", (t) => {
-  const directory = fixture(t);
-  mkdirSync(resolve(directory, "dist"));
-  mkdirSync(resolve(directory, ".test-tmp"));
-  writeFileSync(resolve(directory, "dist/stale.js"), "stale");
-  const tarball = resolve(
-    directory,
-    ".test-tmp/overmux-xterm-fork-6.0.0-overmux.1.tgz",
-  );
-  writeFileSync(tarball, "stale");
-  writeFileSync(
-    resolve(directory, "upstream.ts"),
-    "export const upstream = { tag: '6.0.1' };\n",
-  );
+for (const command of ["build", "pack", "verify"]) {
+  test(`a rejected ${command} removes stale workspace outputs and tarball`, (t) => {
+    const directory = fixture(t);
+    mkdirSync(resolve(directory, "dist"));
+    mkdirSync(resolve(directory, ".test-tmp"));
+    writeFileSync(resolve(directory, "dist/stale.js"), "stale");
+    const tarball = resolve(
+      directory,
+      ".test-tmp/overmux-xterm-fork-6.0.0-overmux.1.tgz",
+    );
+    writeFileSync(tarball, "stale");
+    writeFileSync(
+      resolve(directory, "upstream.ts"),
+      "export const upstream = { tag: '6.0.1' };\n",
+    );
 
-  const result = invoke(directory, "build");
+    const result = invoke(directory, "build", {}, [command]);
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /base differs/);
-  assert.equal(existsSync(resolve(directory, "dist")), false);
-  assert.equal(existsSync(tarball), false);
-});
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /base differs/);
+    assert.equal(existsSync(resolve(directory, "dist")), false);
+    assert.equal(existsSync(tarball), false);
+  });
+}
 
 test("builder rejects removed aliases instead of starting upstream work", (t) => {
   const directory = fixture(t);

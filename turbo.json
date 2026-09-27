@@ -5,9 +5,27 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "overmux#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/generate-ai-context-docs.ts",
+        "$TURBO_ROOT$/packages/runtime/ai-context/src/**"
+      ]
+    },
     "@overmux/xterm-fork#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
+      "outputLogs": "new-only",
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!CONTRIBUTING.md",
+        "!.changeset/**",
+        "!tests/**",
+        "$TURBO_ROOT$/.node-version",
+        "$TURBO_ROOT$/mise.toml"
+      ],
       "passThroughEnv": [
         "NODE_OPTIONS",
         "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH",
@@ -19,11 +37,38 @@
       "persistent": true
     },
     "generate-content": {
-      "outputs": [".content-collections/**"]
+      "outputs": [".content-collections/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/generate-ai-context-docs.ts",
+        "$TURBO_ROOT$/packages/runtime/ai-context/src/**",
+        "$TURBO_ROOT$/packages/runtime/overmux/docs/400-reference/700-cli/600-docs.md"
+      ]
+    },
+    "@overmux/www#build": {
+      "dependsOn": ["^build", "generate-content"],
+      "outputs": ["dist/**"]
+    },
+    "@overmux/www#test": {
+      "dependsOn": ["^build", "generate-content"],
+      "outputs": []
+    },
+    "@overmux/www#typecheck": {
+      "dependsOn": ["^build", "generate-content"],
+      "outputs": []
     },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "@overmux/xterm-fork#test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/turbo.json",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/pnpm-lock.yaml"
+      ]
     },
     "overmux#test": {
       "dependsOn": ["^build", "build"],
@@ -38,10 +83,5 @@
       "dependsOn": ["^build"],
       "outputs": []
     }
-  },
-  "globalDependencies": [
-    "scripts/generate-ai-context-docs.ts",
-    "packages/runtime/ai-context/src/**",
-    "packages/runtime/overmux/docs/400-reference/700-cli/600-docs.md"
-  ]
+  }
 }

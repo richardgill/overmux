@@ -1,0 +1,17 @@
+{
+  "name": "@overmux/dev-fixtures",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@overmux/git": "workspace:*",
+    "@overmux/pi": "workspace:*",
+    "@overmux/tmux": "workspace:*",
+    "overmux": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
+  }
+}

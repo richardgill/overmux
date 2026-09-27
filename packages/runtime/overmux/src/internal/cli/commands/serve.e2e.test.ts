@@ -14,10 +14,10 @@ import {
 const cliPath = fileURLToPath(
   new URL("../../../../dist/bin.js", import.meta.url),
 );
-const repositoryRoot = fileURLToPath(
-  new URL("../../../../../../../", import.meta.url),
+// Keep consumers in the runtime package's dependency scope, not the workspace root's.
+const testTemporaryRoot = fileURLToPath(
+  new URL("../../../../.test-tmp/", import.meta.url),
 );
-const testTemporaryRoot = join(repositoryRoot, ".test-tmp");
 
 type ExitResult = {
   code: number | null;

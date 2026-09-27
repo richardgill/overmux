@@ -54,6 +54,8 @@ jobs:
             command: pnpm test
           - name: Build
             command: pnpm build
+          - name: Xterm fork verification
+            command: pnpm --filter @overmux/xterm-fork local-ci
           - name: Zellij plugin
             command: pnpm --filter @overmux/zellij check-plugin
     steps:
