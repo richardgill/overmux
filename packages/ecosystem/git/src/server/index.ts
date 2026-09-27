@@ -113,7 +113,7 @@ export const gitChangesResource = (
         comparisons,
         detailLevel = "summary",
         contextLines = 3,
-      } = gitChangesInputSchema.parse(input);
+      } = input;
 
       assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
@@ -132,15 +132,10 @@ export const gitChangesResource = (
 
       signal.throwIfAborted();
       assertSubscriptionHealthy(state, repoRoot);
-      return gitChangesSchema.parse(result);
+      return result;
     },
     subscribe: (input, invalidate, context) =>
-      subscribeToRepository(
-        state,
-        gitChangesInputSchema.parse(input).repoRoot,
-        invalidate,
-        context,
-      ),
+      subscribeToRepository(state, input.repoRoot, invalidate, context),
   };
 };
 
@@ -155,12 +150,7 @@ export const gitDiffResource = (
     kind: "subscription",
     contract: { input: gitDiffParamsSchema, output: gitDiffSchema },
     read: async (input, { signal }) => {
-      const {
-        repoRoot,
-        file,
-        comparison,
-        contextLines = 3,
-      } = gitDiffParamsSchema.parse(input);
+      const { repoRoot, file, comparison, contextLines = 3 } = input;
 
       assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
@@ -179,14 +169,9 @@ export const gitDiffResource = (
 
       signal.throwIfAborted();
       assertSubscriptionHealthy(state, repoRoot);
-      return gitDiffSchema.parse(result);
+      return result;
     },
     subscribe: (input, invalidate, context) =>
-      subscribeToRepository(
-        state,
-        gitDiffParamsSchema.parse(input).repoRoot,
-        invalidate,
-        context,
-      ),
+      subscribeToRepository(state, input.repoRoot, invalidate, context),
   };
 };

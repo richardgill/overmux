@@ -11,7 +11,6 @@ type WatchEntry = {
   timer?: NodeJS.Timeout;
   error?: Error;
   disposed: boolean;
-  ready: boolean;
 };
 
 const watchers = new Map<string, WatchEntry>();
@@ -113,7 +112,6 @@ const startWatcher = (repository: Repository, entry: WatchEntry) => {
     // native handle. A readiness invalidation closes that otherwise missed gap.
     entry.watcher.on("ready", () => {
       if (!entry.disposed && !entry.error) {
-        entry.ready = true;
         publish(entry);
       }
     });
@@ -137,7 +135,7 @@ export const watchRepository = ({
 
   let entry = watchers.get(repository.repoRoot);
   if (!entry) {
-    entry = { listeners: new Set(), disposed: false, ready: false };
+    entry = { listeners: new Set(), disposed: false };
     watchers.set(repository.repoRoot, entry);
   }
 
@@ -146,7 +144,7 @@ export const watchRepository = ({
   const listener = () => (owned.error ? onError(owned.error) : invalidate());
   owned.listeners.add(listener);
 
-  if (owned.error || owned.ready) {
+  if (owned.error) {
     queueMicrotask(() => {
       if (owned.listeners.has(listener)) {
         listener();

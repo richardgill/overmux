@@ -5,7 +5,11 @@ import type {
   GitDiff,
   GitFileChange,
 } from "../shared";
-import { readFileComparisons, type FileComparison } from "./comparisons";
+import {
+  listFileComparisons,
+  selectFileComparison,
+  type FileComparison,
+} from "./comparisons";
 import { readContents } from "./contents";
 import { buildFileDiff } from "./diff";
 import { readBranch, type Repository } from "./repository";
@@ -28,37 +32,6 @@ const computedCounts = (diff: GitDiff) =>
           }),
           { added: 0, deleted: 0 },
         );
-
-const readFileDiffs = async <T>({
-  repository,
-  files,
-  contextLines,
-  signal,
-  retain,
-}: ReadOptions & {
-  files: readonly FileComparison[];
-  retain: (diff: GitDiff, file: FileComparison) => T;
-}): Promise<T[]> => {
-  const results: T[] = [];
-
-  // Four files bound both blob-batch memory and concurrent working-file I/O. The
-  // retained value must drop full texts here for hunks-only responses, not later.
-  for (let offset = 0; offset < files.length; offset += 4) {
-    signal.throwIfAborted();
-    const batch = files.slice(offset, offset + 4);
-    const contents = await readContents({ repository, files: batch, signal });
-    contents.forEach((captured, index) => {
-      signal.throwIfAborted();
-      results.push(
-        retain(
-          buildFileDiff({ contents: captured, contextLines }),
-          batch[index]!,
-        ),
-      );
-    });
-  }
-  return results;
-};
 
 const changeSummary = (
   repository: Repository,
@@ -86,6 +59,48 @@ const changeSummary = (
   };
 };
 
+const readDetailedChanges = async ({
+  repository,
+  comparison,
+  files,
+  detailLevel,
+  contextLines,
+  signal,
+}: ReadOptions & {
+  comparison: GitComparison;
+  files: readonly FileComparison[];
+  detailLevel: "hunks" | "full";
+}): Promise<GitFileChange[]> => {
+  const changes: GitFileChange[] = [];
+
+  // Four files bound both blob-batch memory and concurrent working-file I/O. The
+  // retained value must drop full texts here for hunks-only responses, not later.
+  for (let offset = 0; offset < files.length; offset += 4) {
+    signal.throwIfAborted();
+    const batch = files.slice(offset, offset + 4);
+    const contents = await readContents({ repository, files: batch, signal });
+    contents.forEach((captured, index) => {
+      signal.throwIfAborted();
+      const diff = buildFileDiff({ contents: captured, contextLines });
+      const file = batch[index]!;
+      changes.push({
+        ...changeSummary(repository, comparison, contextLines, file),
+        binary: diff.binary,
+        lineStats: computedCounts(diff),
+        diff:
+          detailLevel === "hunks"
+            ? { hunks: diff.hunks }
+            : {
+                hunks: diff.hunks,
+                oldContent: diff.oldContent,
+                newContent: diff.newContent,
+              },
+      });
+    });
+  }
+  return changes;
+};
+
 export const readChanges = async ({
   repository,
   comparisons,
@@ -100,7 +115,7 @@ export const readChanges = async ({
   const groups: [string, GitFileChange[]][] = [];
 
   for (const [name, comparison] of Object.entries(comparisons)) {
-    const files = await readFileComparisons({
+    const files = await listFileComparisons({
       repository,
       comparison,
       includeStats: detailLevel === "summary",
@@ -112,24 +127,13 @@ export const readChanges = async ({
         ? files.map((file) =>
             changeSummary(repository, comparison, contextLines, file),
           )
-        : await readFileDiffs({
+        : await readDetailedChanges({
             repository,
+            comparison,
             files,
+            detailLevel,
             contextLines,
             signal,
-            retain: (diff, file) => ({
-              ...changeSummary(repository, comparison, contextLines, file),
-              binary: diff.binary,
-              lineStats: computedCounts(diff),
-              diff:
-                detailLevel === "hunks"
-                  ? { hunks: diff.hunks }
-                  : {
-                      hunks: diff.hunks,
-                      oldContent: diff.oldContent,
-                      newContent: diff.newContent,
-                    },
-            }),
           });
     groups.push([name, changes]);
   }
@@ -151,21 +155,20 @@ export const readDiff = async ({
   file: string;
   comparison: GitComparison;
 }): Promise<GitDiff> => {
-  const files = await readFileComparisons({
+  const selected = await selectFileComparison({
     repository,
     comparison,
     file,
-    includeStats: false,
     signal,
   });
-
-  const diffs = await readFileDiffs({
+  const contents = await readContents({
     repository,
-    files,
-    contextLines,
+    files: [selected],
     signal,
-    retain: (diff) => diff,
   });
-
-  return diffs[0]!;
+  signal.throwIfAborted();
+  if (contents.length !== 1 || !contents[0]) {
+    throw new Error("Expected exactly one selected file content");
+  }
+  return buildFileDiff({ contents: contents[0], contextLines });
 };

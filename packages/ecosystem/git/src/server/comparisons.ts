@@ -31,6 +31,7 @@ export type FileComparison = {
 };
 
 type Entry = { mode: string; gitObjectId: string; conflicted?: boolean };
+
 type ReadOptions = { repository: Repository; signal: AbortSignal };
 
 const absent: ContentSource = { kind: "absent" };
@@ -343,22 +344,15 @@ const includeConflicts = (
   return [...byPath.values()];
 };
 
-export const readFileComparisons = async ({
+const prepareFileComparisons = async ({
   repository,
   comparison,
-  file,
   includeStats,
   signal,
 }: ReadOptions & {
   comparison: GitComparison;
-  file?: string;
   includeStats: boolean;
-}): Promise<FileComparison[]> => {
-  if (file !== undefined) {
-    gitFileSchema.parse(file);
-    assertFileOutsideMetadata(repository, join(repository.repoRoot, file));
-  }
-
+}) => {
   const { baseCommit, targetCommit } = await resolveComparison({
     repository,
     comparison,
@@ -422,56 +416,89 @@ export const readFileComparisons = async ({
     includeStats,
   );
 
-  if (comparison.target.kind === "workingTree" && file === undefined) {
-    const tracked = new Set([
-      ...trackedPaths,
-      ...files.map((entry) => entry.path),
-    ]);
-    files.push(
-      ...(await readUntrackedComparisons({
-        repository,
-        trackedPaths: tracked,
-        includeStats,
-        signal,
-      })),
-    );
+  return { baseCommit, files, index, targetCommit, trackedPaths };
+};
+
+export const listFileComparisons = async ({
+  repository,
+  comparison,
+  includeStats,
+  signal,
+}: ReadOptions & {
+  comparison: GitComparison;
+  includeStats: boolean;
+}): Promise<FileComparison[]> => {
+  const prepared = await prepareFileComparisons({
+    repository,
+    comparison,
+    includeStats,
+    signal,
+  });
+  if (comparison.target.kind !== "workingTree") {
+    return prepared.files;
   }
 
-  if (file === undefined) {
-    return files;
-  }
+  const tracked = new Set([
+    ...prepared.trackedPaths,
+    ...prepared.files.map((entry) => entry.path),
+  ]);
+  const untracked = await readUntrackedComparisons({
+    repository,
+    trackedPaths: tracked,
+    includeStats,
+    signal,
+  });
+  return [...prepared.files, ...untracked];
+};
 
-  const selected = files.find((item) => item.path === file);
+export const selectFileComparison = async ({
+  repository,
+  comparison,
+  file,
+  signal,
+}: ReadOptions & {
+  comparison: GitComparison;
+  file: string;
+}): Promise<FileComparison> => {
+  gitFileSchema.parse(file);
+  assertFileOutsideMetadata(repository, join(repository.repoRoot, file));
+
+  const prepared = await prepareFileComparisons({
+    repository,
+    comparison,
+    includeStats: false,
+    signal,
+  });
+  const selected = prepared.files.find((item) => item.path === file);
   if (selected) {
-    return [selected];
+    return selected;
   }
 
   const oldEntry =
     comparison.base.kind === "index"
-      ? index.get(file)
-      : await treeEntry({ repository, commit: baseCommit, file, signal });
-
+      ? prepared.index.get(file)
+      : await treeEntry({
+          repository,
+          commit: prepared.baseCommit,
+          file,
+          signal,
+        });
   const newEntry =
     comparison.target.kind === "commit"
-      ? await treeEntry({ repository, commit: targetCommit, file, signal })
-      : index.get(file);
-
-  const renamedAway = files.some((entry) => entry.previousPath === file);
-  return [
-    {
-      path: file,
-      ...(renamedAway ||
-      (oldEntry && !newEntry && comparison.target.kind !== "workingTree")
-        ? { status: "deleted" as const }
-        : !oldEntry && comparison.target.kind === "workingTree"
-          ? { status: "untracked" as const }
-          : {}),
-      binary: unsupported(oldEntry) || unsupported(newEntry),
-      old: source(oldEntry),
-      new:
-        comparison.target.kind === "workingTree"
-          ? { kind: "workingFile", path: file }
-          : source(newEntry),
-    },
-  ];
+      ? await treeEntry({
+          repository,
+          commit: prepared.targetCommit,
+          file,
+          signal,
+        })
+      : prepared.index.get(file);
+  return {
+    path: file,
+    binary: unsupported(oldEntry) || unsupported(newEntry),
+    old: source(oldEntry),
+    new:
+      comparison.target.kind === "workingTree"
+        ? { kind: "workingFile", path: file }
+        : source(newEntry),
+  };
 };

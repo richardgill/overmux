@@ -38,6 +38,7 @@ const context = (signal = new AbortController().signal) => ({
   invalidate: vi.fn(),
   signal,
 });
+
 const git = (root: string, args: string[]) =>
   exec("git", ["-C", root, ...args], {
     env: {
@@ -47,6 +48,7 @@ const git = (root: string, args: string[]) =>
       GIT_CONFIG_GLOBAL: "/dev/null",
     },
   });
+
 const createRepository = async (committed = true) => {
   await mkdir(testRoot, { recursive: true });
   const root = await mkdtemp(join(testRoot, "git-"));
@@ -62,6 +64,7 @@ const createRepository = async (committed = true) => {
   }
   return root;
 };
+
 const unstaged: GitComparison = {
   base: { kind: "index" },
   target: { kind: "workingTree" },
@@ -75,14 +78,22 @@ const combined: GitComparison = {
   target: { kind: "workingTree" },
 };
 const comparisons = { staged, unstaged, combined };
+
 const input = (repoRoot: string) => ({ repoRoot, comparisons });
+
 const readChanges = (repoRoot: string) =>
   gitChangesResource().read(input(repoRoot), context());
-const readDiff = (
+const readDiff = async (
   repoRoot: string,
   file: string,
   comparison: GitComparison = unstaged,
-) => gitDiffResource().read({ repoRoot, file, comparison }, context());
+) => {
+  const resource = gitDiffResource();
+  return resource.read(
+    resource.contract.input.parse({ repoRoot, file, comparison }),
+    context(),
+  );
+};
 
 // Each test releases subscriptions before deleting repositories; otherwise the
 // deliberate deletion would itself generate live invalidations for later tests.
@@ -109,9 +120,11 @@ describe("public named Git resources", () => {
         .success,
     ).toBe(false);
     const obsoleteInput = { ...input(repoRoot), detail: "full" };
-    await expect(
-      gitChangesResource().read(obsoleteInput, context()),
-    ).rejects.toThrow();
+
+    expect(() =>
+      gitChangesResource().contract.input.parse(obsoleteInput),
+    ).toThrow();
+
     expect(result.branch).toEqual({
       name: "main",
       upstream: null,
@@ -501,6 +514,35 @@ describe("shared subscription lifecycle", () => {
     await stopDiff();
     expect(close).toHaveBeenCalledTimes(1);
     expect(watcher.closed).toBe(true);
+  });
+
+  it("does not catch up late subscribers after watcher readiness", async () => {
+    const repoRoot = await createRepository();
+    const resource = gitChangesResource();
+    const firstInvalidated = vi.fn();
+    const stopFirst = await resource.subscribe(
+      input(repoRoot),
+      firstInvalidated,
+      context(),
+    );
+    disposers.push(stopFirst);
+    await vi.waitFor(() => expect(firstInvalidated).toHaveBeenCalled());
+
+    firstInvalidated.mockClear();
+
+    const lateInvalidated = vi.fn();
+    const stopLate = await resource.subscribe(
+      input(repoRoot),
+      lateInvalidated,
+      context(),
+    );
+    disposers.push(stopLate);
+    await Promise.resolve();
+    expect(lateInvalidated).not.toHaveBeenCalled();
+
+    await writeFile(join(repoRoot, "file.txt"), "changed\n");
+    await vi.waitFor(() => expect(lateInvalidated).toHaveBeenCalled());
+    expect(firstInvalidated).toHaveBeenCalled();
   });
 
   it("covers linked-worktree metadata outside the allowed root and reports current branch divergence", async () => {
