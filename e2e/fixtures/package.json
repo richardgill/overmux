@@ -1,0 +1,12 @@
+{
+  "name": "@overmux/e2e-fixtures",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@overmux/git": "workspace:*",
+    "@overmux/pi": "workspace:*",
+    "@overmux/tmux": "workspace:*",
+    "overmux": "workspace:*",
+    "zod": "catalog:"
+  }
+}

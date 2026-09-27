@@ -5,10 +5,10 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { checkOvermux } from "./check-overmux";
 
-const repositoryRoot = fileURLToPath(
-  new URL("../../../../../../", import.meta.url),
+// Keep consumers in the runtime package's dependency scope, not the workspace root's.
+const testTemporaryRoot = fileURLToPath(
+  new URL("../../../.test-tmp/", import.meta.url),
 );
-const testTemporaryRoot = join(repositoryRoot, ".test-tmp");
 const directories: string[] = [];
 
 const createProject = async ({
