@@ -11,10 +11,6 @@
   },
   "type": "module",
   "exports": {
-    "./react": {
-      "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js"
-    },
     "./server": {
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
@@ -22,12 +18,10 @@
     "./shared": {
       "types": "./dist/shared/index.d.ts",
       "import": "./dist/shared/index.js"
-    },
-    "./styles.css": "./dist/styles.css"
+    }
   },
   "files": [
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md",
     "dist",
     "docs",
     "src",
@@ -40,32 +34,23 @@
     "access": "public"
   },
   "scripts": {
-    "build": "rm -rf dist && vp pack && cp src/react/styles.css dist/styles.css",
+    "build": "rm -rf dist && vp pack",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@overmux/ui": "workspace:*",
-    "@pierre/diffs": "catalog:",
-    "@pierre/trees": "catalog:",
     "chokidar": "5.0.0",
     "diff": "9.0.0"
   },
   "devDependencies": {
     "@overmux/tsconfig": "workspace:*",
     "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "happy-dom": "catalog:",
     "overmux": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
     "overmux": "^0.0.8",
-    "react": "^19.0.0",
     "zod": "catalog:peers"
   }
 }

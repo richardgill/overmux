@@ -73,7 +73,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@overmux/git": "workspace:*",
+    "@pierre/diffs": "catalog:",
     "@richardgill/pi-config": "0.0.8",
     "@shikijs/langs": "catalog:",
     "@shikijs/themes": "catalog:",

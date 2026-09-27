@@ -1,4 +1,4 @@
 ---
 ---
 
-The accompanying patch changeset releases `@overmux/git` and `overmux`. Opt out of unrelated package releases requested by the repository-wide lockfile rule: this dependency update adds Git-only `chokidar` and `diff` dependencies. The remaining lockfile changes are pnpm's normalization of existing development-only Vitest peer references, not runtime dependency upgrades for other packages.
+The accompanying patch changeset releases `@overmux/git`, `@overmux/pi`, and `overmux`. Opt out of unrelated package releases requested by the repository-wide lockfile rule: the lockfile removes Git UI dependencies and makes Pi depend directly on `@pierre/diffs`. No other published package changes runtime dependencies.
