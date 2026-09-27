@@ -38,7 +38,7 @@ describe("Zellij state resource", () => {
     expect(await resource.read(undefined, context(controller.signal))).toBe(
       state,
     );
-    const dispose = resource.subscribe(
+    const dispose = await resource.subscribe(
       undefined,
       invalidate,
       context(controller.signal),

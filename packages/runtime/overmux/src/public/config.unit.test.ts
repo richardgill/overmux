@@ -108,10 +108,11 @@ const createConfig = () =>
         contract: watchedContract,
         kind: "subscription",
         read: (input) => ({ revision: input.scope.length }),
-        subscribe: (input, _invalidate, context) => {
+        subscribe: async (input, _invalidate, context) => {
           expectTypeOf(input).toEqualTypeOf<{ scope: string }>();
+          expectTypeOf(context.signal).toEqualTypeOf<AbortSignal>();
           context.invalidate("lookup", { id: input.scope });
-          return () => undefined;
+          return async () => undefined;
         },
       },
       workspace: {

@@ -448,8 +448,12 @@ describe("shared subscription lifecycle", () => {
     const diff = gitDiffResource();
     const changed = vi.fn();
     const diffChanged = vi.fn();
-    const stopChanges = changes.subscribe(input(repoRoot), changed, context());
-    const stopDiff = diff.subscribe(
+    const stopChanges = await changes.subscribe(
+      input(repoRoot),
+      changed,
+      context(),
+    );
+    const stopDiff = await diff.subscribe(
       { repoRoot, file: "file.txt", comparison: unstaged },
       diffChanged,
       context(),
@@ -495,7 +499,9 @@ describe("shared subscription lifecycle", () => {
     await git(main, ["worktree", "add", "-b", "linked", repoRoot]);
     const resource = gitChangesResource({ allowedRoots: [repoRoot] });
     const invalidate = vi.fn();
-    disposers.push(resource.subscribe(input(repoRoot), invalidate, context()));
+    disposers.push(
+      await resource.subscribe(input(repoRoot), invalidate, context()),
+    );
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
     expect((await resource.read(input(repoRoot), context())).branch.name).toBe(
       "linked",
@@ -523,9 +529,11 @@ describe("shared subscription lifecycle", () => {
     const resource = gitChangesResource();
     const invalidate = vi.fn();
     const controller = new AbortController();
-    await resource.subscribe(input(repoRoot), invalidate, context())();
+    await (
+      await resource.subscribe(input(repoRoot), invalidate, context())
+    )();
     disposers.push(
-      resource.subscribe(
+      await resource.subscribe(
         input(repoRoot),
         invalidate,
         context(controller.signal),
@@ -537,7 +545,11 @@ describe("shared subscription lifecycle", () => {
     await resource.read(input(repoRoot), context());
     expect(watch).not.toHaveBeenCalled();
     expect(invalidate).not.toHaveBeenCalled();
-    const stop = resource.subscribe(input(repoRoot), invalidate, context());
+    const stop = await resource.subscribe(
+      input(repoRoot),
+      invalidate,
+      context(),
+    );
     disposers.push(stop);
     await vi.waitFor(() => expect(watch).toHaveBeenCalledTimes(1));
     const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
@@ -561,7 +573,11 @@ describe("shared subscription lifecycle", () => {
       if (mode === "polling") {
         vi.stubEnv("CHOKIDAR_USEPOLLING", "true");
       }
-      const stop = resource.subscribe(input(repoRoot), invalidate, context());
+      const stop = await resource.subscribe(
+        input(repoRoot),
+        invalidate,
+        context(),
+      );
       disposers.push(stop);
       await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
       if (mode === "event") {
@@ -573,7 +589,9 @@ describe("shared subscription lifecycle", () => {
       await stop();
       vi.unstubAllEnvs();
       const recovered = vi.fn();
-      disposers.push(resource.subscribe(input(repoRoot), recovered, context()));
+      disposers.push(
+        await resource.subscribe(input(repoRoot), recovered, context()),
+      );
       await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
       expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
         repoRoot,
@@ -589,7 +607,7 @@ describe("shared subscription lifecycle", () => {
     const controller = new AbortController();
     const invalidate = vi.fn(() => controller.abort());
     disposers.push(
-      resource.subscribe(
+      await resource.subscribe(
         input(repoRoot),
         invalidate,
         context(controller.signal),

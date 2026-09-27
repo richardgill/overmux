@@ -54,7 +54,7 @@ describe("tmux state resource", () => {
     const { backend, publish } = setup();
     const resource = tmuxResource({ backend });
     const invalidate = vi.fn();
-    const dispose = resource.subscribe(undefined, invalidate, context());
+    const dispose = await resource.subscribe(undefined, invalidate, context());
 
     expect(backend.subscribe).toHaveBeenCalledOnce();
     expect(
@@ -67,7 +67,7 @@ describe("tmux state resource", () => {
       (await resource.read(undefined, context())).hierarchy.sessions[0]?.name,
     ).toBe("updated");
 
-    dispose();
+    await dispose();
     publish(tmuxState("later"));
     expect(invalidate).toHaveBeenCalledOnce();
   });
