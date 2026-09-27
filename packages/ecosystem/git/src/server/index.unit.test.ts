@@ -294,7 +294,7 @@ describe("git plugin", () => {
         resolveInvalidation = resolve;
       });
     const ready = waitForInvalidation();
-    const dispose = changes.subscribe(
+    const dispose = await changes.subscribe(
       { comparison: "uncommitted", path: root },
       () => {
         invalidations += 1;
@@ -321,7 +321,7 @@ describe("git plugin", () => {
     await git(root, ["update-ref", "refs/heads/watcher", "HEAD"]);
     await metadataInvalidation;
     expect(invalidations).toBeGreaterThan(afterWorktree);
-    dispose();
+    await dispose();
     const afterDispose = invalidations;
     await writeFile(join(root, "nested", "tracked.txt"), "three\n");
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -343,7 +343,7 @@ describe("git plugin", () => {
     const watcherReady = new Promise<void>((resolve) => {
       ready = resolve;
     });
-    const disposeUncommitted = sourceControl.subscribe(
+    const disposeUncommitted = await sourceControl.subscribe(
       { comparison: "uncommitted", path: root },
       () => {
         uncommittedInvalidated();
@@ -352,7 +352,7 @@ describe("git plugin", () => {
       context(),
     );
     await watcherReady;
-    const disposeBase = sourceControl.subscribe(
+    const disposeBase = await sourceControl.subscribe(
       { comparison: "base", path: root },
       baseInvalidated,
       context(),
@@ -366,8 +366,8 @@ describe("git plugin", () => {
       expect(uncommittedInvalidated).toHaveBeenCalledOnce();
       expect(baseInvalidated).toHaveBeenCalledOnce();
     });
-    disposeUncommitted();
-    disposeBase();
+    await disposeUncommitted();
+    await disposeBase();
   });
 
   it("distinguishes staged and unstaged patches and tracks binary files", async () => {

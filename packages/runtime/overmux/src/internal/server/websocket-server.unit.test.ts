@@ -325,6 +325,9 @@ export default defineOvermuxConfig({
         subscriptionId: "subscription-1",
         type: "resource-subscribe",
       });
+      await expect(reader.next("resource-invalidated")).resolves.toMatchObject({
+        subscriptionId: "subscription-1",
+      });
       const operationResponse = await fetch(
         `${server.url}/api/operations/invalidate`,
         {
