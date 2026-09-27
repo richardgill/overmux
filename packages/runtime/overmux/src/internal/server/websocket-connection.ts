@@ -310,6 +310,9 @@ const subscribeResource = (
           }),
         signal,
       );
+      // While setup awaits, the client can unsubscribe and reuse this ID.
+      // Compare entry identity so late setup cannot attach to its replacement.
+      // Core makes cleanup safe to call again if cancellation already released it.
       if (state.subscriptions.get(message.subscriptionId) === entry) {
         entry.dispose = dispose;
       } else {
@@ -319,6 +322,8 @@ const subscribeResource = (
       // A cancelled setup may settle after its ID has been reused. Do not
       // remove the replacement or deliver the old failure to its client.
       if (signal.aborted) {
+        // Ignore expected cancellation, but log other late failures,
+        // including cleanup errors, without sending them to the client.
         if (cause !== signal.reason) {
           state.serverLogger?.log({
             correlationId: identity.operationId,
