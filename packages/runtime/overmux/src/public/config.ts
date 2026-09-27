@@ -86,7 +86,7 @@ export type SubscriptionResourceDefinition<
     input: z.output<TInput>,
     invalidate: () => void,
     context: TContext,
-  ) => RuntimeDisposer;
+  ) => RuntimeDisposer | Promise<RuntimeDisposer>;
 };
 
 export type DerivedResourceDefinition<

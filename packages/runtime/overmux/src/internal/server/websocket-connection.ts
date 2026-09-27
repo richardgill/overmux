@@ -301,7 +301,7 @@ const subscribeResource = (
     state.subscriptions.set(message.subscriptionId, entry);
     const signal = AbortSignal.any([operationSignal, controller.signal]);
     try {
-      entry.dispose = resource.subscribe(
+      const dispose = await resource.subscribe(
         message.input,
         () =>
           void send(state, {
@@ -310,8 +310,33 @@ const subscribeResource = (
           }),
         signal,
       );
+      // While setup awaits, the client can unsubscribe and reuse this ID.
+      // Compare entry identity so late setup cannot attach to its replacement.
+      // Core makes cleanup safe to call again if cancellation already released it.
+      if (state.subscriptions.get(message.subscriptionId) === entry) {
+        entry.dispose = dispose;
+      } else {
+        await dispose();
+      }
     } catch (cause) {
-      await disposeSubscription(state, message.subscriptionId);
+      // A cancelled setup may settle after its ID has been reused. Do not
+      // remove the replacement or deliver the old failure to its client.
+      if (signal.aborted) {
+        // Ignore expected cancellation, but log other late failures,
+        // including cleanup errors, without sending them to the client.
+        if (cause !== signal.reason) {
+          state.serverLogger?.log({
+            correlationId: identity.operationId,
+            details: { ...identity, ...diagnosticErrorDetails(cause) },
+            event: "resource-subscription-cancelled-error",
+            level: "error",
+          });
+        }
+        return;
+      }
+      if (state.subscriptions.get(message.subscriptionId) === entry) {
+        await disposeSubscription(state, message.subscriptionId);
+      }
       throw cause;
     }
   });

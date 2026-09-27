@@ -19,7 +19,7 @@ export type RuntimeResource = {
     input: unknown,
     listener: () => void,
     signal?: AbortSignal,
-  ) => RuntimeDisposer;
+  ) => Promise<RuntimeDisposer>;
 };
 
 export type RuntimeResourceDefinitions = Readonly<
@@ -45,6 +45,51 @@ type CreateRuntimeResourcesOptions = {
   definitions: RuntimeResourceDefinitions;
   instance: HandlerContext["instance"];
   lifecycle: RuntimeLifecycle;
+};
+
+const createSubscriptionLifetime = ({
+  entry,
+  invalidationListeners,
+  lifecycle,
+  signal,
+}: {
+  entry: InvalidationListener;
+  invalidationListeners: Set<InvalidationListener>;
+  lifecycle: RuntimeLifecycle;
+  signal?: AbortSignal;
+}) => {
+  const controller = new AbortController();
+  const subscriptionSignal = AbortSignal.any([
+    lifecycle.requestSignal(signal),
+    controller.signal,
+  ]);
+  subscriptionSignal.throwIfAborted();
+  const registeredEntry = {
+    ...entry,
+    listener: () => {
+      if (!subscriptionSignal.aborted) {
+        entry.listener();
+      }
+    },
+  };
+  const disposers: RuntimeDisposer[] = [];
+  // Own the lifetime before invoking userland, which can invalidate and
+  // trigger unsubscribe synchronously, or await setup past cancellation.
+  const release = lifecycle.track(async () => {
+    invalidationListeners.delete(registeredEntry);
+    await lifecycle.disposeAll(disposers);
+  }, subscriptionSignal);
+  const dispose = () => {
+    controller.abort(new Error("Resource subscription closed"));
+    return release();
+  };
+  invalidationListeners.add(registeredEntry);
+  return {
+    dispose,
+    disposers,
+    refresh: registeredEntry.listener,
+    signal: subscriptionSignal,
+  };
 };
 
 export const createRuntimeResources = ({
@@ -119,13 +164,14 @@ export const createRuntimeResources = ({
     return definition.contract.output.parse(rawOutput);
   };
 
-  const activateWatchers = (
+  const activateSubscriptions = async (
     id: string,
     rawInput: unknown,
-    signal: AbortSignal | undefined,
+    signal: AbortSignal,
     activated: Set<string>,
     disposers: RuntimeDisposer[],
-  ) => {
+  ): Promise<void> => {
+    signal.throwIfAborted();
     if (activated.has(id)) {
       return;
     }
@@ -133,44 +179,77 @@ export const createRuntimeResources = ({
     const definition = definitions[id]!;
     const input = definition.contract.input.parse(rawInput);
     if (definition.kind === "subscription") {
-      const dispose = definition.subscribe(
+      const dispose = await definition.subscribe(
         input,
-        () => invalidateResource(id, input),
+        () => {
+          if (!signal.aborted) {
+            invalidateResource(id, input);
+          }
+        },
         context(signal),
       );
       if (typeof dispose !== "function") {
         throw new Error(`Resource ${id} subscribe must return a disposer`);
       }
+      // Cancellation releases acquired resources without waiting for pending
+      // userland setup. A cleanup returned after cancellation is released here.
+      if (signal.aborted) {
+        await dispose();
+        signal.throwIfAborted();
+      }
       disposers.push(dispose);
       return;
     }
     if (definition.kind === "derived") {
-      graph.dependencies.get(id)?.forEach((dependencyId) => {
-        activateWatchers(dependencyId, rawInput, signal, activated, disposers);
-      });
+      for (const dependencyId of graph.dependencies.get(id) ?? []) {
+        await activateSubscriptions(
+          dependencyId,
+          rawInput,
+          signal,
+          activated,
+          disposers,
+        );
+      }
     }
   };
 
   Object.keys(definitions).forEach((name) => {
     resources.set(name, {
       read: (input, signal) => read(name, input, signal),
-      subscribe: (rawInput, listener, signal) => {
+      subscribe: async (rawInput, listener, signal) => {
         lifecycle.requestSignal(signal).throwIfAborted();
         const input = definitions[name]!.contract.input.parse(rawInput);
-        const entry = { input, listener, resourceId: name };
-        const watcherDisposers: RuntimeDisposer[] = [];
-        invalidationListeners.add(entry);
+        const subscription = createSubscriptionLifetime({
+          entry: { input, listener, resourceId: name },
+          invalidationListeners,
+          lifecycle,
+          signal,
+        });
         try {
-          activateWatchers(name, rawInput, signal, new Set(), watcherDisposers);
+          await activateSubscriptions(
+            name,
+            rawInput,
+            subscription.signal,
+            new Set(),
+            subscription.disposers,
+          );
+          subscription.signal.throwIfAborted();
+          // Refresh only this subscriber to cover changes during setup. Returning
+          // cleanup does not imply an external event source is already ready.
+          subscription.refresh();
+          subscription.signal.throwIfAborted();
+          return subscription.dispose;
         } catch (cause) {
-          invalidationListeners.delete(entry);
-          void lifecycle.disposeAll(watcherDisposers).catch(() => undefined);
+          try {
+            await subscription.dispose();
+          } catch (cleanupError) {
+            throw new AggregateError(
+              [cause, cleanupError],
+              "Resource subscription setup and cleanup failed",
+            );
+          }
           throw cause;
         }
-        return lifecycle.track(async () => {
-          invalidationListeners.delete(entry);
-          await lifecycle.disposeAll(watcherDisposers);
-        }, signal);
       },
     });
   });
