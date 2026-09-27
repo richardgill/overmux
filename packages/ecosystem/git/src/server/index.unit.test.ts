@@ -95,6 +95,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
 });
+
 describe("public named Git resources", () => {
   it("separates named comparisons, preserves cancellation, and hands live diffParams directly to the independent resource", async () => {
     const repoRoot = await createRepository();
@@ -164,6 +165,7 @@ describe("public named Git resources", () => {
       gitChangesResource().read(input(repoRoot), context(AbortSignal.abort())),
     ).rejects.toThrow();
   });
+
   testCases.each(["summary", "hunks", "full"] as const)(
     "returns only requested %s detail and preserves context zero",
     async (detailLevel) => {
@@ -206,6 +208,7 @@ describe("public named Git resources", () => {
       ).toHaveLength(2);
     },
   );
+
   it("reads remote-tracking, tags, explicit merge bases and historical renames independently of index conflicts", async () => {
     const repoRoot = await createRepository();
     const original = Array.from(
@@ -268,6 +271,7 @@ describe("public named Git resources", () => {
       ),
     ).rejects.toThrow("conflicted");
   });
+
   it("handles unborn and detached HEAD, rejects invalid refs and unavailable merge bases", async () => {
     const repoRoot = await createRepository(false);
     await writeFile(join(repoRoot, "new.txt"), "new\n");
@@ -307,6 +311,7 @@ describe("public named Git resources", () => {
       }),
     ).rejects.toThrow();
   });
+
   it("keeps summary usable for binary, oversized and submodule entries, but fails unsupported detail", async () => {
     const repoRoot = await createRepository();
     await writeFile(join(repoRoot, "empty"), "");
@@ -361,6 +366,7 @@ describe("public named Git resources", () => {
       "absent on both sides",
     );
   });
+
   it("authorizes canonical directories before discovery, excludes metadata and preserves final link text", async () => {
     const repoRoot = await createRepository();
     const outside = await createRepository();
@@ -402,6 +408,7 @@ describe("public named Git resources", () => {
     await exec("git", ["init", "--bare", bare]);
     await expect(readChanges(bare)).rejects.toThrow();
   });
+
   testCases.each([
     "../secret",
     "/absolute",
@@ -414,6 +421,7 @@ describe("public named Git resources", () => {
       "repository-relative",
     );
   });
+
   it("rejects empty comparisons, invalid roots, unsupported comparisons and partial full variants", () => {
     const entry = {
       path: "file",
@@ -441,6 +449,7 @@ describe("public named Git resources", () => {
     ).toBe(false);
   });
 });
+
 describe("shared subscription lifecycle", () => {
   it("shares native handles, covers working files/index/refs, and closes only after the last subscriber", async () => {
     const repoRoot = await createRepository();
@@ -493,6 +502,7 @@ describe("shared subscription lifecycle", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(watcher.closed).toBe(true);
   });
+
   it("covers linked-worktree metadata outside the allowed root and reports current branch divergence", async () => {
     const main = await createRepository();
     const repoRoot = join(main, "linked");
@@ -524,6 +534,7 @@ describe("shared subscription lifecycle", () => {
       behind: 0,
     });
   });
+
   it("prevents late attachment after cancellation during authorization", async () => {
     const repoRoot = await createRepository();
     const resource = gitChangesResource();
@@ -556,6 +567,7 @@ describe("shared subscription lifecycle", () => {
     expect(invalidate).not.toHaveBeenCalled();
     expect(watcher.closed).toBe(true);
   });
+
   testCases.each(["event", "startup", "polling"])(
     "makes %s watcher failure terminal until resubscription",
     async (mode) => {
@@ -595,6 +607,7 @@ describe("shared subscription lifecycle", () => {
       );
     },
   );
+
   it("keeps each subscription failure until its own cleanup", async () => {
     const repoRoot = await createRepository();
     const resource = gitChangesResource();
@@ -628,6 +641,7 @@ describe("shared subscription lifecycle", () => {
       repoRoot,
     );
   });
+
   it("keeps authorization failures terminal until subscription cleanup", async () => {
     const repoRoot = await createRepository();
     const missingAllowedRoot = join(repoRoot, "missing-allowed-root");
@@ -651,6 +665,7 @@ describe("shared subscription lifecycle", () => {
       repoRoot,
     );
   });
+
   it("releases a subscription aborted reentrantly by startup-error invalidation", async () => {
     const repoRoot = await createRepository();
     watch.mockImplementationOnce(() => {

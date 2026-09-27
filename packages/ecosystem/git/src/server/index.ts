@@ -11,6 +11,7 @@ import {
 import { authorizeRepository } from "./repository";
 import { readChanges, readDiff } from "./reads";
 import { watchRepository } from "./watchers";
+
 export type { GitResourceOptions } from "../shared";
 
 type GitResourceState = {
@@ -112,12 +113,14 @@ export const gitChangesResource = (
         detailLevel = "summary",
         contextLines = 3,
       } = gitChangesInputSchema.parse(input);
+
       assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
         repoRoot,
         allowedRoots: state.allowedRoots,
         signal,
       });
+
       const result = await readChanges({
         repository,
         comparisons,
@@ -125,6 +128,7 @@ export const gitChangesResource = (
         contextLines,
         signal,
       });
+
       signal.throwIfAborted();
       assertSubscriptionHealthy(state, repoRoot);
       return gitChangesSchema.parse(result);
@@ -156,12 +160,14 @@ export const gitDiffResource = (
         comparison,
         contextLines = 3,
       } = gitDiffParamsSchema.parse(input);
+
       assertSubscriptionHealthy(state, repoRoot);
       const repository = await authorizeRepository({
         repoRoot,
         allowedRoots: state.allowedRoots,
         signal,
       });
+
       const result = await readDiff({
         repository,
         file,
@@ -169,6 +175,7 @@ export const gitDiffResource = (
         contextLines,
         signal,
       });
+
       signal.throwIfAborted();
       assertSubscriptionHealthy(state, repoRoot);
       return gitDiffSchema.parse(result);

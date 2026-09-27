@@ -9,6 +9,7 @@ export const absolutePathSchema = z
     (path) => path.startsWith("/") && !path.includes("\0"),
     "Expected an absolute path",
   );
+
 // Example: "src/app.ts", relative to repoRoot.
 export const gitFileSchema = z
   .string()
@@ -28,11 +29,13 @@ export const gitFileSchema = z
         ),
     "Expected a repository-relative file outside Git metadata",
   );
+
 export const gitResourceOptionsSchema = z
   .object({
     allowedRoots: z.array(absolutePathSchema).min(1).readonly().optional(),
   })
   .strict();
+
 export const gitBranchSchema = z
   .object({
     // A detached HEAD has no name; an unborn branch retains its intended name.
@@ -44,15 +47,20 @@ export const gitBranchSchema = z
     unborn: z.boolean(),
   })
   .strict();
+
 const refSchema = z
   .string()
   .min(1)
   .refine((ref) => !ref.includes("\0"));
+
 const commitSchema = z
   .object({ kind: z.literal("commit"), ref: refSchema })
   .strict();
+
 const indexSchema = z.object({ kind: z.literal("index") }).strict();
+
 const workingTreeSchema = z.object({ kind: z.literal("workingTree") }).strict();
+
 export const gitComparisonSchema = z.union([
   z.object({ base: indexSchema, target: workingTreeSchema }).strict(),
   z
@@ -70,6 +78,7 @@ export const gitComparisonSchema = z.union([
     })
     .strict(),
 ]);
+
 // Zod records discard __proto__. Validate through a Map so every caller label
 // survives; Object.fromEntries creates safe own properties even for that name.
 const namedRecordSchema = <Schema extends z.ZodType>(valueSchema: Schema) =>
@@ -89,6 +98,7 @@ const namedRecordSchema = <Schema extends z.ZodType>(valueSchema: Schema) =>
     .transform((entries) => Object.fromEntries(entries));
 
 const contextLinesSchema = z.number().int().nonnegative();
+
 export const gitChangesInputSchema = z
   .object({
     repoRoot: absolutePathSchema,
@@ -100,6 +110,7 @@ export const gitChangesInputSchema = z
     contextLines: contextLinesSchema.optional(),
   })
   .strict();
+
 export const gitDiffParamsSchema = z
   .object({
     repoRoot: absolutePathSchema,
@@ -108,6 +119,7 @@ export const gitDiffParamsSchema = z
     contextLines: contextLinesSchema.optional(),
   })
   .strict();
+
 // Examples (text excludes the line terminator):
 // { kind: "context", oldLine: 1, newLine: 1, text: "unchanged" }
 // { kind: "removed", oldLine: 2, text: "before" }
@@ -136,6 +148,7 @@ export const gitDiffLineSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+
 // Example of adding the first line to an empty file: {
 //   oldStart: 0, oldCount: 0, newStart: 1, newCount: 1,
 //   lines: [{ kind: "added", newLine: 1, text: "hello" }],
@@ -149,6 +162,7 @@ export const gitDiffHunkSchema = z
     lines: z.array(gitDiffLineSchema),
   })
   .strict();
+
 export const gitHunkDiffSchema = z
   .object({
     hunks: z.array(gitDiffHunkSchema),
@@ -156,12 +170,14 @@ export const gitHunkDiffSchema = z
     newContent: z.never().optional(),
   })
   .strict();
+
 export const gitFullDiffSchema = gitHunkDiffSchema
   .extend({
     oldContent: z.string().nullable(),
     newContent: z.string().nullable(),
   })
   .strict();
+
 // Example of a new text file (null means absent; "" would mean an empty file): {
 //   file: "hello.txt", binary: false, oldContent: null, newContent: "hello\n",
 //   hunks: [{
@@ -176,6 +192,7 @@ export const gitDiffSchema = gitFullDiffSchema
     binary: z.boolean(),
   })
   .strict();
+
 export const gitFileChangeSchema = z
   .object({
     path: gitFileSchema,
@@ -200,6 +217,7 @@ export const gitFileChangeSchema = z
     diff: z.union([gitHunkDiffSchema, gitFullDiffSchema]).optional(),
   })
   .strict();
+
 export const gitChangesSchema = z
   .object({
     repoRoot: absolutePathSchema,
@@ -207,6 +225,7 @@ export const gitChangesSchema = z
     comparisons: namedRecordSchema(z.array(gitFileChangeSchema)),
   })
   .strict();
+
 export type GitResourceOptions = z.infer<typeof gitResourceOptionsSchema>;
 export type GitBranch = z.infer<typeof gitBranchSchema>;
 export type GitComparison = z.infer<typeof gitComparisonSchema>;

@@ -15,6 +15,7 @@ type ReadOptions = {
   signal: AbortSignal;
   contextLines: number;
 };
+
 const computedCounts = (diff: GitDiff) =>
   diff.binary
     ? null
@@ -27,6 +28,7 @@ const computedCounts = (diff: GitDiff) =>
           }),
           { added: 0, deleted: 0 },
         );
+
 const readFileDiffs = async <T>({
   repository,
   files,
@@ -38,6 +40,7 @@ const readFileDiffs = async <T>({
   retain: (diff: GitDiff, file: FileComparison) => T;
 }): Promise<T[]> => {
   const results: T[] = [];
+
   // Four files bound both blob-batch memory and concurrent working-file I/O. The
   // retained value must drop full texts here for hunks-only responses, not later.
   for (let offset = 0; offset < files.length; offset += 4) {
@@ -56,6 +59,7 @@ const readFileDiffs = async <T>({
   }
   return results;
 };
+
 const changeSummary = (
   repository: Repository,
   comparison: GitComparison,
@@ -81,6 +85,7 @@ const changeSummary = (
     },
   };
 };
+
 export const readChanges = async ({
   repository,
   comparisons,
@@ -93,6 +98,7 @@ export const readChanges = async ({
 }): Promise<GitChanges> => {
   const branch = await readBranch({ repository, signal });
   const groups: [string, GitFileChange[]][] = [];
+
   for (const [name, comparison] of Object.entries(comparisons)) {
     const files = await readFileComparisons({
       repository,
@@ -100,6 +106,7 @@ export const readChanges = async ({
       includeStats: detailLevel === "summary",
       signal,
     });
+
     const changes =
       detailLevel === "summary"
         ? files.map((file) =>
@@ -126,12 +133,14 @@ export const readChanges = async ({
           });
     groups.push([name, changes]);
   }
+
   return {
     repoRoot: repository.repoRoot,
     branch,
     comparisons: Object.fromEntries(groups),
   };
 };
+
 export const readDiff = async ({
   repository,
   file,
@@ -149,6 +158,7 @@ export const readDiff = async ({
     includeStats: false,
     signal,
   });
+
   const diffs = await readFileDiffs({
     repository,
     files,
@@ -156,5 +166,6 @@ export const readDiff = async ({
     signal,
     retain: (diff) => diff,
   });
+
   return diffs[0]!;
 };

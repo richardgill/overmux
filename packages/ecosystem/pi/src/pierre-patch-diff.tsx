@@ -123,6 +123,7 @@ export const PierrePatchDiff = ({
 }: PierrePatchDiffProps) => {
   const container = useRef<HTMLDivElement>(null);
   useNativeTextSelection(container, patch);
+
   return (
     <div ref={container} style={{ display: "contents" }}>
       <PatchDiff

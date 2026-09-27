@@ -13,6 +13,7 @@ type WatchEntry = {
   disposed: boolean;
   ready: boolean;
 };
+
 const watchers = new Map<string, WatchEntry>();
 
 const publish = (entry: WatchEntry) => {
@@ -20,6 +21,7 @@ const publish = (entry: WatchEntry) => {
     entry.listeners.forEach((invalidate) => invalidate());
   }
 };
+
 const closeWatcher = (entry: WatchEntry) => {
   if (entry.timer) {
     clearTimeout(entry.timer);
@@ -35,6 +37,7 @@ const closeWatcher = (entry: WatchEntry) => {
       console.warn("Git watcher cleanup failed", cause),
     );
 };
+
 const failWatcher = (entry: WatchEntry, cause: unknown) => {
   if (entry.disposed || entry.error) {
     return;
@@ -46,6 +49,7 @@ const failWatcher = (entry: WatchEntry, cause: unknown) => {
   closeWatcher(entry);
   publish(entry);
 };
+
 const scheduleInvalidation = (entry: WatchEntry) => {
   if (entry.disposed || entry.error) {
     return;
@@ -59,6 +63,7 @@ const scheduleInvalidation = (entry: WatchEntry) => {
     }, 75);
   }
 };
+
 const startWatcher = (repository: Repository, entry: WatchEntry) => {
   try {
     // Native recursive fs.watch differs in readiness and symlink traversal across
@@ -129,15 +134,18 @@ export const watchRepository = ({
   signal: AbortSignal;
 }): (() => void) => {
   signal.throwIfAborted();
+
   let entry = watchers.get(repository.repoRoot);
   if (!entry) {
     entry = { listeners: new Set(), disposed: false, ready: false };
     watchers.set(repository.repoRoot, entry);
   }
+
   const owned = entry;
   // Each subscription gets a distinct identity even if callers reuse a callback.
   const listener = () => (owned.error ? onError(owned.error) : invalidate());
   owned.listeners.add(listener);
+
   if (owned.error || owned.ready) {
     queueMicrotask(() => {
       if (owned.listeners.has(listener)) {
@@ -147,6 +155,7 @@ export const watchRepository = ({
   } else if (!owned.watcher) {
     startWatcher(repository, owned);
   }
+
   const dispose = () => {
     signal.removeEventListener("abort", dispose);
     owned.listeners.delete(listener);
@@ -156,9 +165,11 @@ export const watchRepository = ({
       closeWatcher(owned);
     }
   };
+
   signal.addEventListener("abort", dispose, { once: true });
   if (signal.aborted) {
     dispose();
   }
+
   return dispose;
 };

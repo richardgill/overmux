@@ -19,6 +19,7 @@ export type ContentSource =
   | { kind: "blob"; gitObjectId: string }
   | { kind: "workingFile"; path: string }
   | { kind: "absent" };
+
 export type FileComparison = {
   path: string;
   previousPath?: string;
@@ -28,15 +29,19 @@ export type FileComparison = {
   old: ContentSource;
   new: ContentSource;
 };
+
 type Entry = { mode: string; gitObjectId: string; conflicted?: boolean };
 type ReadOptions = { repository: Repository; signal: AbortSignal };
+
 const absent: ContentSource = { kind: "absent" };
 const source = (entry?: Entry): ContentSource =>
   !entry || entry.mode === "000000"
     ? absent
     : { kind: "blob", gitObjectId: entry.gitObjectId };
+
 const unsupported = (entry?: Entry) =>
   entry?.mode === "160000" || entry?.mode === "040000";
+
 const statusByCode: Record<string, GitFileChange["status"]> = {
   A: "added",
   D: "deleted",
@@ -84,6 +89,7 @@ const resolveCommit = async ({
     throw cause;
   }
 };
+
 const resolveComparison = async ({
   repository,
   comparison,
@@ -131,6 +137,7 @@ const resolveComparison = async ({
   );
   return { baseCommit, targetCommit };
 };
+
 const readIndex = async ({ repository, signal }: ReadOptions) => {
   const output = await runGit(
     repository.repoRoot,
@@ -151,6 +158,7 @@ const readIndex = async ({ repository, signal }: ReadOptions) => {
   }
   return entries;
 };
+
 const treeEntry = async ({
   repository,
   commit,
@@ -170,6 +178,7 @@ const treeEntry = async ({
   const match = /^(\d+) \S+ ([a-f0-9]+)\t/.exec(output.toString("utf8"));
   return match ? { mode: match[1]!, gitObjectId: match[2]! } : undefined;
 };
+
 const parseComparisons = (
   output: Buffer,
   workingTree: boolean,
@@ -222,6 +231,7 @@ const parseComparisons = (
   }
   return [...files.values()];
 };
+
 const readWorkingMetadata = async ({
   repository,
   baseCommit,
@@ -271,6 +281,7 @@ const readWorkingMetadata = async ({
     await rm(directory, { recursive: true, force: true });
   }
 };
+
 const readUntrackedComparisons = async ({
   repository,
   trackedPaths,
@@ -308,6 +319,7 @@ const readUntrackedComparisons = async ({
   }
   return files;
 };
+
 const includeConflicts = (
   files: FileComparison[],
   index: Map<string, Entry>,
@@ -330,6 +342,7 @@ const includeConflicts = (
   }
   return [...byPath.values()];
 };
+
 export const readFileComparisons = async ({
   repository,
   comparison,
@@ -345,6 +358,7 @@ export const readFileComparisons = async ({
     gitFileSchema.parse(file);
     assertFileOutsideMetadata(repository, join(repository.repoRoot, file));
   }
+
   const { baseCommit, targetCommit } = await resolveComparison({
     repository,
     comparison,
@@ -357,15 +371,18 @@ export const readFileComparisons = async ({
       { signal, input: "" },
     ),
   );
+
   const args =
     comparison.base.kind === "index" ? [] : [baseCommit ?? emptyTree];
   if (comparison.target.kind === "commit") {
     args.push(targetCommit ?? emptyTree);
   }
+
   const index =
     comparison.target.kind === "commit"
       ? new Map<string, Entry>()
       : await readIndex({ repository, signal });
+
   const diffArgs = [
     "diff",
     "--raw",
@@ -380,6 +397,7 @@ export const readFileComparisons = async ({
     ...args,
     "--",
   ];
+
   const { output, trackedPaths } =
     comparison.target.kind === "workingTree" && comparison.base.kind !== "index"
       ? await readWorkingMetadata({
@@ -393,6 +411,7 @@ export const readFileComparisons = async ({
           output: await runGit(repository.repoRoot, diffArgs, { signal }),
           trackedPaths: new Set(index.keys()),
         };
+
   const files = includeConflicts(
     parseComparisons(
       output,
@@ -402,6 +421,7 @@ export const readFileComparisons = async ({
     index,
     includeStats,
   );
+
   if (comparison.target.kind === "workingTree" && file === undefined) {
     const tracked = new Set([
       ...trackedPaths,
@@ -416,21 +436,26 @@ export const readFileComparisons = async ({
       })),
     );
   }
+
   if (file === undefined) {
     return files;
   }
+
   const selected = files.find((item) => item.path === file);
   if (selected) {
     return [selected];
   }
+
   const oldEntry =
     comparison.base.kind === "index"
       ? index.get(file)
       : await treeEntry({ repository, commit: baseCommit, file, signal });
+
   const newEntry =
     comparison.target.kind === "commit"
       ? await treeEntry({ repository, commit: targetCommit, file, signal })
       : index.get(file);
+
   const renamedAway = files.some((entry) => entry.previousPath === file);
   return [
     {

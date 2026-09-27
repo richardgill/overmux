@@ -13,39 +13,50 @@ export type FileContents = {
   oldBytes: Buffer | null;
   newBytes: Buffer | null;
 };
+
 type WorkingOptions = {
   repository: Repository;
   file: string;
   signal: AbortSignal;
 };
+
 const isMissing = (cause: unknown) =>
   ["ENOENT", "ENOTDIR"].includes((cause as NodeJS.ErrnoException)?.code ?? "");
+
 const workingChunks = async function* ({
   repository,
   file,
   signal,
 }: WorkingOptions) {
   gitFileSchema.parse(file);
+
   const path = join(repository.repoRoot, file);
   assertFileOutsideMetadata(repository, path);
+
   try {
     // Reject directory symlinks, including links back into the tree: their Git path
     // names the link, not its descendants. A final symlink is read as target text.
     const parent = dirname(path);
+
     if ((await realpath(parent)) !== parent) {
       throw new Error("Git file cannot traverse a symlink directory");
     }
+
     signal.throwIfAborted();
     const metadata = await lstat(path);
+
     if (metadata.isSymbolicLink()) {
       yield await readlink(path, { encoding: "buffer" });
       return;
     }
+
     if (!metadata.isFile()) {
       throw new Error("Git diff does not support directories or submodules");
     }
+
     // O_NOFOLLOW closes a final-component replacement race between lstat and open.
     const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+
     try {
       const opened = await handle.stat();
       if (
@@ -57,8 +68,10 @@ const workingChunks = async function* ({
           "Git file changed identity while opening it; retry the read",
         );
       }
+
       // A stream bounds growth during the read too, unlike a size check + readFile.
       yield Buffer.alloc(0);
+
       for await (const chunk of handle.createReadStream({
         autoClose: false,
         signal,
@@ -75,6 +88,7 @@ const workingChunks = async function* ({
     }
   }
 };
+
 const readWorkingFile = async (
   options: WorkingOptions,
 ): Promise<Buffer | null> => {
@@ -89,10 +103,12 @@ const readWorkingFile = async (
   }
   return chunks.length ? Buffer.concat(chunks) : null;
 };
+
 export const readWorkingSummary = async (options: WorkingOptions) => {
   let lines = 0;
   let finalByte: number | undefined;
   let sample = Buffer.alloc(0);
+
   // Summary counts stream without retaining file contents or building hunks.
   for await (const chunk of workingChunks(options)) {
     if (sample.length < 8192) {
@@ -110,6 +126,7 @@ export const readWorkingSummary = async (options: WorkingOptions) => {
       }
     }
   }
+
   try {
     // A character split at the sample boundary is not evidence of binary data.
     new TextDecoder("utf-8", { fatal: true }).decode(sample, {
@@ -118,6 +135,7 @@ export const readWorkingSummary = async (options: WorkingOptions) => {
   } catch {
     return { binary: true, lineStats: null };
   }
+
   return {
     binary: false,
     lineStats: {
@@ -126,6 +144,7 @@ export const readWorkingSummary = async (options: WorkingOptions) => {
     },
   };
 };
+
 const readBlobs = async ({
   repository,
   files,
@@ -143,9 +162,11 @@ const readBlobs = async ({
     ),
   ];
   const blobs = new Map<string, Buffer>();
+
   if (!ids.length) {
     return blobs;
   }
+
   // Check every object size before asking Git to emit payloads. Batch output has a
   // separate ceiling; the content-side bound still applies independently.
   const sizes = await runGit(
@@ -153,6 +174,7 @@ const readBlobs = async ({
     ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
     { signal, input: `${ids.join("\n")}\n` },
   );
+
   for (const row of sizes.toString("utf8").trim().split("\n")) {
     const [, type, size] = row.split(" ");
     if (type !== "blob") {
@@ -162,11 +184,13 @@ const readBlobs = async ({
       throw new Error(`Git blob content exceeded ${MAX_CONTENT_BYTES} bytes`);
     }
   }
+
   const output = await runGit(repository.repoRoot, ["cat-file", "--batch"], {
     signal,
     input: `${ids.join("\n")}\n`,
     maxOutputBytes: ids.length * (MAX_CONTENT_BYTES + 128),
   });
+
   let offset = 0;
   for (const id of ids) {
     const end = output.indexOf(10, offset);
@@ -190,6 +214,7 @@ const readBlobs = async ({
   }
   return blobs;
 };
+
 const readSide = (
   side: ContentSource,
   blobs: Map<string, Buffer>,
@@ -208,6 +233,7 @@ const readSide = (
   }
   return bytes;
 };
+
 export const readContents = async ({
   repository,
   files,
@@ -220,7 +246,9 @@ export const readContents = async ({
   if (files.some((file) => file.status === "conflicted")) {
     throw new Error("Git diff does not support conflicted files");
   }
+
   const blobs = await readBlobs({ repository, files, signal });
+
   return Promise.all(
     files.map(async (file) => {
       const [oldBytes, newBytes] = await Promise.all([

@@ -6,6 +6,7 @@ import { structuredPatch, type StructuredPatchHunk } from "diff";
 import type { GitDiff, GitDiffHunk, GitDiffLine } from "../shared";
 
 import type { FileContents } from "./contents";
+
 export const isBinary = (bytes: Buffer | null) =>
   bytes !== null && (bytes.includes(0) || !isUtf8(bytes));
 
@@ -59,6 +60,7 @@ const numberHunk = (
     // still appears above; full texts retain the newline distinction for consumers.
     return [];
   });
+
   // jsdiff's structured ranges are one-based even when empty; unified diff uses
   // the preceding line for an empty range (zero when inserting at the start).
   return {
@@ -81,10 +83,12 @@ export const buildFileDiff = ({
   if (oldBytes === null && newBytes === null) {
     throw new Error("Git diff file is absent on both sides");
   }
+
   const identity = {
     file,
     ...(previousPath === undefined ? {} : { previousPath }),
   };
+
   if (isBinary(oldBytes) || isBinary(newBytes)) {
     return {
       ...identity,
@@ -94,8 +98,10 @@ export const buildFileDiff = ({
       hunks: [],
     };
   }
+
   const oldContent = oldBytes?.toString("utf8") ?? null;
   const newContent = newBytes?.toString("utf8") ?? null;
+
   // Keep CRLF and terminal-newline differences significant. Bound pathological
   // edit distances instead of allowing an open diff to monopolize the server.
   const patch = structuredPatch(
@@ -112,11 +118,14 @@ export const buildFileDiff = ({
       timeout: 500,
     },
   );
+
   if (!patch) {
     throw new Error("Git text diff exceeded its computation limit");
   }
+
   const oldLines = lineTexts(oldContent ?? "");
   const newLines = lineTexts(newContent ?? "");
+
   return {
     ...identity,
     binary: false,
