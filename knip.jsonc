@@ -5,16 +5,17 @@
   "treatConfigHintsAsErrors": true,
   "workspaces": {
     ".": {
-      "entry": [
-        "e2e/fixtures/*.{ts,tsx}",
-        "fixtures/*.{ts,tsx}",
-        "fixtures/src/main.tsx",
-      ],
       "ignoreBinaries": ["op"],
       "ignoreDependencies": [
         "@earendil-works/pi-coding-agent",
         "@earendil-works/pi-tui",
       ],
+    },
+    "fixtures": {
+      "entry": ["*.{ts,tsx}"],
+    },
+    "e2e/fixtures": {
+      "entry": ["*.{ts,tsx}"],
     },
     "apps/desktop": {
       "entry": [

@@ -19,7 +19,10 @@ import { root, run, runOutput, text, type Build } from "./shared.mts";
 process.env.NODE_OPTIONS =
   process.env.NODE_OPTIONS ?? "--max-old-space-size=4096";
 const command = process.argv[2] ?? "build";
-assert.ok(["build", "pack"].includes(command), `Unknown command: ${command}`);
+assert.ok(
+  ["build", "pack", "verify"].includes(command),
+  `Unknown command: ${command}`,
+);
 
 const packageVersion = JSON.parse(
   readFileSync(resolve(root, "package.json"), "utf8"),
@@ -178,9 +181,11 @@ const runCommand = () => {
   try {
     validateVersionBase(packageVersion, upstream.tag);
     const build = buildPackage();
-    const tarball = packPackage(build);
-    if (command !== "pack") {
-      verifyPackage(build, tarball);
+    if (command !== "build") {
+      const tarball = packPackage(build);
+      if (command === "verify") {
+        verifyPackage(build, tarball);
+      }
     }
     cpSync(build.stage, output, { recursive: true });
   } catch (error) {

@@ -75,16 +75,27 @@ reject any root Changesets plan that versions the fork. Do not bypass that guard
 not viable: Changesets would require ignoring its public consumers too. Desktop's
 private-package versioning remains enabled.
 
-`test:release` owns cheap release tooling tests; `build` owns one fresh upstream build,
-tarball inspection, addon/direct typechecks, UMD/ESM browser behavior and upstream tests.
-Normal Turbo `^build` ordering builds and validates the fork once, then caches `dist/`
-for consumers. `test` only runs release tooling tests, avoiding a second upstream build.
-The fork's standalone `local-ci` runs release tests followed by the same verified
-`build` command. The builder has only two modes: `build` (the default) and `pack`.
+`build` compiles and assembles runtime artifacts and declarations without running
+verification. Normal Turbo `^build` ordering caches `dist/` for consumers, including
+pre-commit typechecking on fresh checkouts. Its inputs include the pinned upstream,
+patches, recipe, shipped docs, dependencies and toolchain configuration; unpublished
+contributor docs, pending notes and tests do not invalidate the build. Root fixture
+dependencies live in fixture workspaces so unrelated runtime edits do not become
+implicit global Turbo inputs. AI-context documentation inputs belong to the runtime
+build and website content tasks rather than every workspace task.
+
+`test` / `test:release` own cheap release tooling and build-cache regression tests.
+`verify` builds fresh, packs, inspects the tarball, typechecks addon/direct consumers,
+runs UMD/ESM browser behavior, and runs upstream tests and lint. CI has a dedicated
+fork verification job; root `local-ci` also runs verification. The fork's standalone
+`local-ci` runs release tests followed by `verify`, so the release workflow still
+publishes only the verified tarball from one fresh build.
+
+The builder has three modes: `build` (the default), `pack`, and `verify`.
 `pack:tarball` deliberately builds fresh runtime artifacts, writes `dist/` and packs
 `.test-tmp/overmux-xterm-fork-<version>.tgz` **without validation** for local inspection.
 It is not a release shortcut: use `local-ci` and inspect its verified tarball before
-publication. Both modes remove stale outputs before starting and on failure.
+publication. All modes remove stale outputs before starting and on failure.
 Node 24 runs these TypeScript scripts without experimental flags.
 No repeat-build or reproducibility check is added. Failed builds remove previous outputs
 before starting. `dist/` exposes workspace runtime/types/CSS; the generated tarball
