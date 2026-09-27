@@ -35,21 +35,14 @@ const assertSubscriptionHealthy = (
   }
 };
 
-const subscribeAuthorized = (
+const subscribeToRepository = async (
   gitResourceState: GitResourceState,
   repoRoot: string,
   invalidate: () => void,
   context: HandlerContext,
-): (() => void) => {
-  const controller = new AbortController();
-  let release: (() => void) | undefined;
+): Promise<() => void> => {
   let failure: Error | undefined;
-  // Authorization and watcher startup can finish after unsubscribe. A local
-  // signal cancels authorization; the guard prevents attaching a late listener.
-  const dispose = () => {
-    controller.abort();
-    context.signal.removeEventListener("abort", dispose);
-    release?.();
+  const clearSubscriptionError = () => {
     if (failure) {
       const subscriptionErrors =
         gitResourceState.subscriptionErrors.get(repoRoot);
@@ -59,9 +52,8 @@ const subscribeAuthorized = (
       }
     }
   };
-
   const fail = (cause: unknown) => {
-    if (controller.signal.aborted || failure) {
+    if (context.signal.aborted || failure) {
       return;
     }
     // A transient authorization/startup failure must not turn into a successful
@@ -75,31 +67,32 @@ const subscribeAuthorized = (
     gitResourceState.subscriptionErrors.set(repoRoot, subscriptionErrors);
     invalidate();
   };
-  context.signal.addEventListener("abort", dispose, { once: true });
-  if (context.signal.aborted) {
-    dispose();
+
+  try {
+    // Authorization and watcher startup can finish after unsubscribe. Context.signal
+    // is the core-owned subscription-local signal that cancels authorization.
+    const repository = await authorizeRepository({
+      repoRoot,
+      allowedRoots: gitResourceState.allowedRoots,
+      signal: context.signal,
+    });
+    context.signal.throwIfAborted();
+    const release = watchRepository({
+      repository,
+      invalidate,
+      onError: fail,
+      signal: context.signal,
+    });
+    // A synchronous startup failure can invalidate and abort reentrantly.
+    // Core invokes the returned cleanup even when startup aborted the subscription.
+    return () => {
+      release();
+      clearSubscriptionError();
+    };
+  } catch (cause) {
+    fail(cause);
+    return clearSubscriptionError;
   }
-  void authorizeRepository({
-    repoRoot,
-    allowedRoots: gitResourceState.allowedRoots,
-    signal: controller.signal,
-  })
-    .then((repository) => {
-      if (!controller.signal.aborted) {
-        release = watchRepository({
-          repository,
-          invalidate,
-          onError: fail,
-          signal: controller.signal,
-        });
-        // A synchronous startup failure can invalidate and abort reentrantly.
-        if (controller.signal.aborted) {
-          release();
-        }
-      }
-    })
-    .catch(fail);
-  return dispose;
 };
 
 export const gitChangesResource = (
@@ -137,7 +130,7 @@ export const gitChangesResource = (
       return gitChangesSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
-      subscribeAuthorized(
+      subscribeToRepository(
         state,
         gitChangesInputSchema.parse(input).repoRoot,
         invalidate,
@@ -181,7 +174,7 @@ export const gitDiffResource = (
       return gitDiffSchema.parse(result);
     },
     subscribe: (input, invalidate, context) =>
-      subscribeAuthorized(
+      subscribeToRepository(
         state,
         gitDiffParamsSchema.parse(input).repoRoot,
         invalidate,

@@ -9,6 +9,7 @@ export type Repository = {
   worktreeGitDir: string;
   sharedGitDir: string;
 };
+
 export const isWithin = (root: string, candidate: string) => {
   const path = relative(root, candidate);
   return (
@@ -16,8 +17,10 @@ export const isWithin = (root: string, candidate: string) => {
     (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
   );
 };
+
 export const gitPath = (output: Buffer) =>
   output.toString("utf8").replace(/\n$/, "");
+
 export const authorizeRepository = async ({
   repoRoot,
   allowedRoots,
@@ -71,6 +74,7 @@ export const authorizeRepository = async ({
   signal.throwIfAborted();
   return { repoRoot: candidate, worktreeGitDir, sharedGitDir };
 };
+
 export const assertFileOutsideMetadata = (
   repository: Repository,
   path: string,
@@ -86,6 +90,7 @@ export const assertFileOutsideMetadata = (
     );
   }
 };
+
 export const readBranch = async ({
   repository,
   signal,

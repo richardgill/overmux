@@ -524,23 +524,20 @@ describe("shared subscription lifecycle", () => {
       behind: 0,
     });
   });
-  it("prevents late attachment after disposal or abort during authorization and watcher startup", async () => {
+  it("prevents late attachment after cancellation during authorization", async () => {
     const repoRoot = await createRepository();
     const resource = gitChangesResource();
     const invalidate = vi.fn();
     const controller = new AbortController();
-    await (
-      await resource.subscribe(input(repoRoot), invalidate, context())
-    )();
-    disposers.push(
-      await resource.subscribe(
-        input(repoRoot),
-        invalidate,
-        context(controller.signal),
-      ),
+    const stopped = resource.subscribe(
+      input(repoRoot),
+      invalidate,
+      context(controller.signal),
     );
     controller.abort();
-    // A successful read waits for the same authorization I/O the disposed
+    const stoppedCleanup = await stopped;
+    await stoppedCleanup();
+    // A successful read waits for the same authorization I/O the cancelled
     // subscriptions started, without relying on a timer-based startup guess.
     await resource.read(input(repoRoot), context());
     expect(watch).not.toHaveBeenCalled();
@@ -598,6 +595,62 @@ describe("shared subscription lifecycle", () => {
       );
     },
   );
+  it("keeps each subscription failure until its own cleanup", async () => {
+    const repoRoot = await createRepository();
+    const resource = gitChangesResource();
+    const firstInvalidated = vi.fn();
+    const secondInvalidated = vi.fn();
+    watch.mockImplementationOnce(() => {
+      throw new Error("watch unavailable");
+    });
+    const first = await resource.subscribe(
+      input(repoRoot),
+      firstInvalidated,
+      context(),
+    );
+    disposers.push(first);
+    const second = await resource.subscribe(
+      input(repoRoot),
+      secondInvalidated,
+      context(),
+    );
+    disposers.push(second);
+    await vi.waitFor(() => {
+      expect(firstInvalidated).toHaveBeenCalled();
+      expect(secondInvalidated).toHaveBeenCalled();
+    });
+    await first();
+    await expect(resource.read(input(repoRoot), context())).rejects.toThrow(
+      "resubscribe",
+    );
+    await second();
+    expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
+      repoRoot,
+    );
+  });
+  it("keeps authorization failures terminal until subscription cleanup", async () => {
+    const repoRoot = await createRepository();
+    const missingAllowedRoot = join(repoRoot, "missing-allowed-root");
+    const resource = gitChangesResource({
+      allowedRoots: [repoRoot, missingAllowedRoot],
+    });
+    const invalidate = vi.fn();
+    const stop = await resource.subscribe(
+      input(repoRoot),
+      invalidate,
+      context(),
+    );
+    disposers.push(stop);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await mkdir(missingAllowedRoot);
+    await expect(resource.read(input(repoRoot), context())).rejects.toThrow(
+      "resubscribe",
+    );
+    await stop();
+    expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
+      repoRoot,
+    );
+  });
   it("releases a subscription aborted reentrantly by startup-error invalidation", async () => {
     const repoRoot = await createRepository();
     watch.mockImplementationOnce(() => {
@@ -606,13 +659,12 @@ describe("shared subscription lifecycle", () => {
     const resource = gitChangesResource();
     const controller = new AbortController();
     const invalidate = vi.fn(() => controller.abort());
-    disposers.push(
-      await resource.subscribe(
-        input(repoRoot),
-        invalidate,
-        context(controller.signal),
-      ),
+    const stop = await resource.subscribe(
+      input(repoRoot),
+      invalidate,
+      context(controller.signal),
     );
+    await stop();
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
     expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
       repoRoot,
