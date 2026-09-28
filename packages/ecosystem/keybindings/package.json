@@ -1,6 +1,6 @@
 {
   "name": "@overmux/keybindings",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "license": "MIT",
   "description": "Shared keyboard binding utilities for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/keybindings",
