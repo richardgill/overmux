@@ -1,5 +1,11 @@
 # @overmux/jsonl-store
 
+## 0.0.7
+
+### Patch Changes
+
+- [#27](https://github.com/richardgill/overmux/pull/27) [`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543) Thanks [@richardgill](https://github.com/richardgill)! - Update shared shortcut bindings for NativeWebView passthrough commands.
+
 ## 0.0.6
 
 ### Patch Changes

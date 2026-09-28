@@ -1,5 +1,16 @@
 # @overmux/desktop
 
+## 0.0.7
+
+### Patch Changes
+
+- [#31](https://github.com/richardgill/overmux/pull/31) [`3d76b5a`](https://github.com/richardgill/overmux/commit/3d76b5a1d724c5badd1ef660df8704875be32e3a) Thanks [@richardgill](https://github.com/richardgill)! - Restore focus to the owning web view when a focused native web view is removed.
+
+- [#27](https://github.com/richardgill/overmux/pull/27) [`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543) Thanks [@richardgill](https://github.com/richardgill)! - Add NativeWebView for sandboxed embedded websites in Overmux Desktop, with persistent shared website sessions and browser fallback content.
+
+- Updated dependencies [[`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543)]:
+  - @overmux/keybindings@0.0.7
+
 ## 0.0.6
 
 ### Patch Changes

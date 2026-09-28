@@ -1,5 +1,19 @@
 # @overmux/tmux
 
+## 0.0.11
+
+### Patch Changes
+
+- [#27](https://github.com/richardgill/overmux/pull/27) [`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543) Thanks [@richardgill](https://github.com/richardgill)! - Update shared shortcut bindings for NativeWebView passthrough commands.
+
+- [#32](https://github.com/richardgill/overmux/pull/32) [`a45f00f`](https://github.com/richardgill/overmux/commit/a45f00f8afadaf0d4554490d227281ba2dfed670) Thanks [@richardgill](https://github.com/richardgill)! - Focus active tmux terminals when their input element becomes ready, preserving focus on session changes. Rename the xterm input-element callback from `onInputChange` to `onInputElementChange` across terminal wrappers.
+
+- Updated dependencies [[`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543), [`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543), [`209da69`](https://github.com/richardgill/overmux/commit/209da69f229a73ecc1f8162a4378085610f7568c), [`a45f00f`](https://github.com/richardgill/overmux/commit/a45f00f8afadaf0d4554490d227281ba2dfed670)]:
+  - @overmux/pty@0.0.7
+  - @overmux/terminal-stream@0.0.7
+  - @overmux/xterm@0.0.10
+  - overmux@0.0.10
+
 ## 0.0.10
 
 ### Patch Changes

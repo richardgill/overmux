@@ -1,5 +1,16 @@
 # overmux
 
+## 0.0.10
+
+### Patch Changes
+
+- [#27](https://github.com/richardgill/overmux/pull/27) [`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543) Thanks [@richardgill](https://github.com/richardgill)! - Add NativeWebView for sandboxed embedded websites in Overmux Desktop, with persistent shared website sessions and browser fallback content.
+
+- [#28](https://github.com/richardgill/overmux/pull/28) [`209da69`](https://github.com/richardgill/overmux/commit/209da69f229a73ecc1f8162a4378085610f7568c) Thanks [@richardgill](https://github.com/richardgill)! - Recommend @pierre/diffs for custom Git diff views in documentation and default AI context.
+
+- Updated dependencies [[`827c701`](https://github.com/richardgill/overmux/commit/827c701ad8e2de3f9aa637fbff0d4e6e7acd2543)]:
+  - @overmux/keybindings@0.0.7
+
 ## 0.0.9
 
 ### Patch Changes
