@@ -39,7 +39,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "chokidar": "5.0.0",
     "diff": "9.0.0"
   },
   "devDependencies": {

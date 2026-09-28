@@ -82,7 +82,6 @@ const subscribeToRepository = async (
     const release = watchRepository({
       repository,
       invalidate,
-      onError: fail,
       signal: context.signal,
     });
     // A synchronous startup failure can invalidate and abort reentrantly.

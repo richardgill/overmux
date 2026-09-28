@@ -168,6 +168,31 @@ The helper creates text patches without modifying the repository. Use `stage` or
 
 Both update automatically when the repository changes.
 
+### Watching and freshness
+
+A subscription watches **directories**, not just files already listed by Git. Existing empty directories, new nested directories, and populated trees moved into the repository remain discoverable. Watches are shared across resources, comparisons, and clients for the same canonical repository root; authorization and results are not shared.
+
+Git decides which directories are ignored, using its own nested `.gitignore` rules, `.git/info/exclude`, and effective global excludes/configuration. Ignored-only trees such as `node_modules` are skipped **before descent**, not merely filtered after notifications. There is no hard-coded dependency-directory blacklist. Git's rules have two important consequences:
+
+- Ignoring a directory does not untrack files already in the index (the staging area). Their ancestor directories remain watched, including force-added files under ignored directories. Adding/removing index entries recomputes coverage.
+- A `!` rule can re-include a path only if Git permits reaching it through its parent directories. Rule order and the location of each `.gitignore` matter; a generic glob matcher is not equivalent to Git.
+
+Native events normally request a refresh after a bounded 75 ms coalescing window. Directory/rule/metadata changes also schedule a single coverage rebuild after 250 ms. These are scheduling delays, not end-to-end latency guarantees: Git reads, filesystem work, and server load take additional time. A refresh after watch installation covers changes made during setup. Directory watches survive atomic file replacement, and ordinary worktree lockfiles such as `Cargo.lock` are not suppressed.
+
+**Reconciliation** means checking actual current state again rather than trusting that every filesystem event arrived. While at least one subscription exists, one shared timer rebuilds scope and requests a full resource refresh 30 seconds after the previous scope scan finishes. This catches lost events, new global excludes/config includes, and edits whose Git status stays unchanged (for example, editing an already-modified file again). External configuration files are deliberately not individually watched: their effects can take this reconciliation interval plus scan/read time to appear. Native watch errors log a warning, retain successful watches, and retry during reconciliation rather than leaving permanently stale subscriptions. Persistent Git/read errors remain errors, not a freshness guarantee.
+
+Overmux's `useResource` keeps one read per query in flight and retains one follow-up invalidation when changes arrive during that read. Opening/reconnecting subscriptions refreshes them; `refetch()` requests an immediate read. There is no new focus hook. Unsubscribe or use `skipToken` for an inactive view: mounted subscriptions, including hidden preloads, still incur reconciliation. The final unsubscribe aborts scope discovery, releases native handles, and cancels timers. Unsubscribed repositories incur no watcher or reconciliation work.
+
+#### Boundaries and cost
+
+- Per-worktree index/HEAD and shared refs/packed-refs/config/info directories are watched, including linked worktrees. Objects, logs, hooks, and other worktrees' administrative trees are not crawled. Unborn repositories (no first commit) need no special watcher mode. Nonstandard metadata such as reftable storage relies on reconciliation.
+- Directory symlinks are not followed, even back into the repository; a symlink itself can still change. The existing canonical-root authorization and file-read symlink restrictions remain in force. As with ordinary filesystem reads, this is not a sandbox against a malicious process concurrently replacing directory ancestors.
+- Submodules are separate repositories: their directories are not recursively watched by the parent. Parent results reconcile periodically; subscribe to the submodule root for its live file diffs. Submodule/directory diffs remain unsupported by `gitDiff`.
+- NUL-delimited Git plumbing preserves spaces, tabs, and newlines in names. The string-based API requires UTF-8 paths; undecodable tracked/directory names warn and fall back to reconciliation, rather than silently watching a different decoded path.
+- Native notifications are not an audit log. Watch limits, permissions, queue overflow, network filesystems, and short-lived changes can lose events. Reconciliation repairs current state once reads succeed; it cannot recover every intermediate transition. Very large eligible trees still cost traversal, handles, and periodic I/O. Traversal uses bounded directory batches and yields between batches; it does not make all repositories cheap.
+
+The private scope builder uses batched Git ignore checks and a tracked-ancestor set; shallow Node directory watches avoid recursive traversal by the watcher backend. The backend is a latency accelerator over reconciliation, not the authority for Git state. This separates scope decisions from notification delivery without introducing a native dependency or a new public configuration surface.
+
 ### `gitChanges`
 
 Register `gitChanges` inline in your existing Overmux configuration:
