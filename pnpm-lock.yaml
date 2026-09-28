@@ -292,9 +292,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@overmux/keybindings':
-        specifier: workspace:*
-        version: link:../../packages/ecosystem/keybindings
       jiti:
         specifier: 'catalog:'
         version: 2.7.0
@@ -305,6 +302,9 @@ importers:
       '@electron/fuses':
         specifier: 'catalog:'
         version: 2.1.3
+      '@overmux/keybindings':
+        specifier: workspace:*
+        version: link:../../packages/ecosystem/keybindings
       '@overmux/shared':
         specifier: workspace:*
         version: link:../../packages/runtime/shared

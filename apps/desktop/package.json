@@ -110,12 +110,12 @@
     }
   },
   "dependencies": {
-    "@overmux/keybindings": "workspace:*",
     "jiti": "catalog:"
   },
   "devDependencies": {
     "@electron/asar": "catalog:",
     "@electron/fuses": "catalog:",
+    "@overmux/keybindings": "workspace:*",
     "@overmux/shared": "workspace:*",
     "@overmux/tsconfig": "workspace:*",
     "@types/node": "catalog:",

@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { createRequire, findPackageJSON } from "node:module";
 import { dirname, resolve } from "node:path";
 import type { Packager } from "electron-builder";
 
@@ -7,6 +7,7 @@ import type { Packager } from "electron-builder";
 // external jiti dependency retain their own notices during packaging.
 // Resolve Scheduler from React DOM, not a possibly different workspace copy.
 const bundledPackages: { name: string; from?: string }[] = [
+  { name: "@overmux/keybindings" },
   { name: "react" },
   { name: "react-dom" },
   { name: "scheduler", from: "react-dom" },
@@ -16,10 +17,14 @@ const bundledPackages: { name: string; from?: string }[] = [
 export const readDependencyNotices = (appDirectory: string) => {
   const require = createRequire(resolve(appDirectory, "package.json"));
   const sections = bundledPackages.map(({ name, from }) => {
-    const dependencyRequire = from
-      ? createRequire(require.resolve(`${from}/package.json`))
-      : require;
-    const manifestPath = dependencyRequire.resolve(`${name}/package.json`);
+    const basePath = from
+      ? require.resolve(`${from}/package.json`)
+      : resolve(appDirectory, "package.json");
+    // Bundled packages need not expose package.json through their exports.
+    const manifestPath = findPackageJSON(name, basePath);
+    if (!manifestPath) {
+      throw new Error(`Missing package manifest for ${name}`);
+    }
     const { version } = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       version: string;
     };
