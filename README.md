@@ -16,6 +16,8 @@ Main features:
 
 ## Demo
 
+[![Watch the Overmux demo](https://customer-vg0wuzs3im0xeh1d.cloudflarestream.com/b568fcbbe38b9b139d78643bd24f1afa/thumbnails/thumbnail.jpg)](https://overmux.com/#demo)
+
 ## Get started
 
 Get started with Overmux in the docs:

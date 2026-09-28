@@ -12,6 +12,7 @@
     "typecheck": "pnpm generate-content && pnpm check-generated-routes && tsc --noEmit"
   },
   "dependencies": {
+    "@cloudflare/stream-react": "catalog:",
     "@content-collections/core": "catalog:",
     "@content-collections/mdx": "catalog:",
     "@content-collections/vite": "catalog:",
