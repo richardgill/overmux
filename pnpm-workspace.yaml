@@ -12,6 +12,7 @@ catalog:
   "@changesets/get-release-plan": 4.0.16
   "@changesets/parse": 0.4.3
   "@changesets/should-skip-package": 0.1.2
+  "@cloudflare/stream-react": 1.9.3
   "@content-collections/core": 0.15.2
   "@content-collections/mdx": 0.2.2
   "@content-collections/vite": 0.3.0

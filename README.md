@@ -16,9 +16,11 @@ Main features:
 
 ## Demo
 
+[![Watch the Overmux demo](./apps/www/public/demo-thumbnail.png)](https://overmux.com/#demo)
+
 ## Get started
 
-Get started with Overmux in the docs:
+Get started with Overmux in the [docs](https://overmux.com/docs):
 
 - [Get started](https://overmux.com/docs/getting-started/install-and-run-overmux)
 - [How Overmux works](https://overmux.com/docs/introduction/how-overmux-works)

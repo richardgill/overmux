@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import readme from "../../../../README.md?raw";
 import { SiteHeader, SiteHeaderControls } from "@/components/docs-layout";
+import { READMEHeading, READMEParagraph } from "@/content/readme-demo";
 
 const githubLicenseUrl =
   "https://github.com/richardgill/overmux/blob/main/LICENSE";
@@ -50,7 +51,9 @@ const HomePage = () => (
     </SiteHeader>
     <main className="mx-auto w-full max-w-3xl px-6 pt-8 pb-16 sm:pt-12 sm:pb-24">
       <article className="readme-content">
-        <ReactMarkdown components={{ a: READMELink }}>
+        <ReactMarkdown
+          components={{ a: READMELink, h2: READMEHeading, p: READMEParagraph }}
+        >
           {homepageMarkdown}
         </ReactMarkdown>
       </article>
