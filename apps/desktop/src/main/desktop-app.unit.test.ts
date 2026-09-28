@@ -39,6 +39,8 @@ const electron = await vi.hoisted(async () => {
       this.emit("destroyed");
     };
     isDestroyed = () => this.destroyed;
+    getURL = () => this.mainFrame.url;
+    getZoomFactor = () => 1;
     focus = vi.fn();
     send = vi.fn();
     setWindowOpenHandler = vi.fn();
@@ -64,6 +66,8 @@ const electron = await vi.hoisted(async () => {
     static instances: WebContentsView[] = [];
     webContents = new WebContents();
     setBounds = vi.fn();
+    setVisible = vi.fn();
+    getBounds = () => ({ x: 0, y: 0, width: 1200, height: 800 });
     constructor() {
       WebContentsView.instances.push(this);
     }
@@ -83,6 +87,13 @@ const electron = await vi.hoisted(async () => {
     session: Object.assign(new EventEmitter(), {
       clearStorageData: vi.fn(async () => undefined),
       clearCache: vi.fn(async () => undefined),
+      fromPartition: vi.fn(() =>
+        Object.assign(new EventEmitter(), {
+          setPermissionRequestHandler: vi.fn(),
+          setPermissionCheckHandler: vi.fn(),
+          setDevicePermissionHandler: vi.fn(),
+        }),
+      ),
     }),
   };
 });
@@ -90,6 +101,7 @@ vi.mock("electron", () => electron);
 
 import { desktopConfigRuntimeSchema } from "../config/schema.js";
 import { remoteInstanceChannels } from "../shared/remote-instance.js";
+import { nativeWebViewChannels } from "../shared/native-web-view-channels.js";
 import { ConfigStore } from "./config-store.js";
 import { DesktopApp } from "./desktop-app.js";
 
@@ -921,5 +933,34 @@ testCases.each(["replace", "reset", "clear", "close"] as const)(
     loading.resolve();
     await Promise.resolve();
     expect(old.loadURL).toHaveBeenCalledTimes(1);
+  },
+);
+
+testCases.each(["reload", "crash", "replace", "close"] as const)(
+  "closes native surfaces when the owning server document is invalidated: %s",
+  async (action) => {
+    await connect();
+    const owner = currentContents();
+    const handler = electron.ipcMain.handle.mock.calls.find(
+      ([channel]) => channel === nativeWebViewChannels.command,
+    )![1] as (event: unknown, command: unknown) => void;
+    handler(
+      { sender: owner, senderFrame: owner.mainFrame },
+      { type: "create", id: crypto.randomUUID() },
+    );
+    const native = currentContents();
+    expect(native).not.toBe(owner);
+
+    if (action === "reload") {
+      owner.emit("did-start-navigation", {}, url, false, true);
+    } else if (action === "crash") {
+      owner.emit("render-process-gone");
+    } else if (action === "replace") {
+      await connect("https://replacement.test");
+    } else {
+      electron.BrowserWindow.instances.at(-1)!.emit("closed");
+    }
+
+    expect(native.isDestroyed()).toBe(true);
   },
 );

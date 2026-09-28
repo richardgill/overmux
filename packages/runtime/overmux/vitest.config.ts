@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 import { baseConfig } from "../../../vitest.config";
 
 const browserTests = [
+  "src/internal/client/native-web-view.unit.test.tsx",
   "src/internal/client/overmux-react.unit.test.tsx",
   "src/internal/client/shortcuts-browser.unit.test.tsx",
   "src/internal/client/theme-scope-browser.unit.test.tsx",

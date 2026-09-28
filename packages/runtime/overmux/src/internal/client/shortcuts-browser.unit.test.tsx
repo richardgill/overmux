@@ -97,6 +97,19 @@ const ChordTarget = ({ run }: { run: () => void }) => {
   return null;
 };
 
+const Dialog = ({ dismiss }: { dismiss: () => void }) => {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        dismiss();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [dismiss]);
+  return null;
+};
+
 const PassthroughTarget = ({
   onKeyDown,
 }: {
@@ -127,9 +140,8 @@ const CommandEntries = () => (
 
 let container: HTMLDivElement;
 let root: Root;
-
 const pressKey = (key: string) =>
-  window.dispatchEvent(
+  document.dispatchEvent(
     new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }),
   );
 
@@ -158,6 +170,8 @@ beforeEach(() => {
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   mediaQueries.clear();
+  vi.clearAllMocks();
+  window.overmuxHost = undefined;
   vi.stubGlobal("matchMedia", (media: string) => {
     const query = mediaQueries.get(media) ?? {
       listeners: new Set(),
@@ -185,6 +199,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  window.overmuxHost = undefined;
   vi.unstubAllGlobals();
 });
 
@@ -268,6 +283,24 @@ describe("scoped keyboard commands", () => {
 
       expect(replayed.mock.calls).toEqual([["F12"], ["f"]]);
       expect(run).not.toHaveBeenCalled();
+    },
+  );
+
+  testCases(
+    "delivers Escape to a normal dialog listener without a command",
+    async () => {
+      const dismiss = vi.fn();
+      await act(async () =>
+        root.render(
+          <RuntimeHarness>
+            <Dialog dismiss={dismiss} />
+          </RuntimeHarness>,
+        ),
+      );
+
+      pressKey("Escape");
+
+      expect(dismiss).toHaveBeenCalledOnce();
     },
   );
 

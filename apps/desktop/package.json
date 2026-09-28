@@ -110,6 +110,7 @@
     }
   },
   "dependencies": {
+    "@overmux/keybindings": "workspace:*",
     "jiti": "catalog:"
   },
   "devDependencies": {

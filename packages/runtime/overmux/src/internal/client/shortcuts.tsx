@@ -8,9 +8,12 @@ import {
   type RefObject,
 } from "react";
 import {
+  keyBindingSequence,
   matchesKeyBinding,
-  platformBinding,
+  matchesShortcutBindingPrefix,
+  normalizedShortcutBinding,
   type KeyBinding,
+  type ShortcutBinding,
 } from "@overmux/keybindings";
 
 import {
@@ -19,7 +22,6 @@ import {
   shortcutMediaQueries,
   type ClientAppDefinition,
   type CommandHandle,
-  type ShortcutBinding,
 } from "./client-definition";
 import {
   CommandsContext,
@@ -28,25 +30,6 @@ import {
   selectCommandRegistration,
   type RegisteredCommand,
 } from "./commands";
-
-const bindingSequence = (binding: ShortcutBinding): KeyBinding[] =>
-  typeof binding === "string" ? [binding] : [...binding];
-
-const normalizedBinding = (binding: ShortcutBinding): string[] =>
-  bindingSequence(binding).map((key) => platformBinding(key));
-
-const sequenceMatches = (
-  binding: ShortcutBinding,
-  pending: string[],
-  event: KeyboardEvent,
-) => {
-  const sequence = normalizedBinding(binding);
-  return (
-    sequence.length > pending.length &&
-    pending.every((key, index) => sequence[index] === key) &&
-    matchesKeyBinding(sequence[pending.length] as KeyBinding, event)
-  );
-};
 
 const isTextInput = (element: Element | null) =>
   element instanceof HTMLInputElement ||
@@ -67,7 +50,7 @@ const acceptsTextInput = (bindings: readonly ShortcutBinding[]) => {
     return true;
   }
   return bindings.some((binding) => {
-    const sequence = bindingSequence(binding);
+    const sequence = keyBindingSequence(binding);
     return (
       sequence.length > 1 ||
       sequence[0]?.startsWith("F") ||
@@ -260,12 +243,12 @@ export const ShortcutHost = ({
     window.addEventListener("focusin", refreshFocus);
     return () => window.removeEventListener("focusin", refreshFocus);
   }, []);
+  const shortcuts = flattenShortcuts(
+    definition,
+    (media) => window.matchMedia(media).matches,
+  );
   useEffect(() => {
-    const shortcuts = flattenShortcuts(
-      definition,
-      (media) => window.matchMedia(media).matches,
-    );
-    let pending: string[] = [];
+    let pending: KeyBinding[] = [];
     let pendingEvents: KeyboardEvent[] = [];
     let pendingTarget: ShortcutInputTarget | undefined;
     let timeout: number | undefined;
@@ -302,8 +285,11 @@ export const ShortcutHost = ({
         shortcut.bindings
           .filter(
             (binding) =>
-              sequenceMatches(binding, pending, event) &&
-              canRunShortcut(shortcut, event, registrations),
+              matchesShortcutBindingPrefix({
+                binding,
+                input: event,
+                pending,
+              }) && canRunShortcut(shortcut, event, registrations),
           )
           .map((binding) => ({ binding, shortcut })),
       );
@@ -317,7 +303,7 @@ export const ShortcutHost = ({
       }
       const complete = matches.find(
         ({ binding }) =>
-          normalizedBinding(binding).length === pending.length + 1,
+          normalizedShortcutBinding(binding).length === pending.length + 1,
       );
       if (complete) {
         clearPending();
@@ -336,7 +322,7 @@ export const ShortcutHost = ({
       }
       pending = [
         ...pending,
-        normalizedBinding(matches[0]!.binding)[pending.length]!,
+        normalizedShortcutBinding(matches[0]!.binding)[pending.length]!,
       ];
       pendingEvents = [...pendingEvents, event];
       event.preventDefault();
