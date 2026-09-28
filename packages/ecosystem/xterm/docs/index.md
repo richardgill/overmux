@@ -58,7 +58,7 @@ All props are optional.
 | `keyMappings`, `onKeyEvent` | Customize keyboard handling |
 | `transformInput` | Transform keyboard input, including phone keyboards and paste, before `onData` |
 | `containerRef` | Access the wrapper element |
-| `onInputChange` | Access the keyboard-input element; `null` on cleanup |
+| `onInputElementChange` | Access the keyboard-input element; `null` on cleanup |
 
 `initOptions` and addon setup apply only on mount.
 
@@ -271,7 +271,7 @@ Styles load automatically with `XtermTerminal`. Use `className` and `style` for 
 
 The stylesheet puts upstream xterm styles in the `om.components` CSS layer and scopes Overmux's wrapper rules. You can customize the wrapper background with `--om-xterm-terminal-background`.
 
-`containerRef` exposes the outer wrapper DOM element, separately from the terminal handle. `onInputChange` receives xterm's keyboard-input element after opening, then `null` on cleanup, useful for shortcut-manager integration.
+`containerRef` exposes the outer wrapper DOM element, separately from the terminal handle. `onInputElementChange` receives xterm's keyboard-input element after opening, then `null` on cleanup, useful for shortcut-manager integration.
 
 ## Terminal controls
 

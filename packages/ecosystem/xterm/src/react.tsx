@@ -59,7 +59,7 @@ export type XtermTerminalProps = {
   initOptions?: XtermTerminalInitOptions;
   onBinary?: (data: string) => void;
   onData?: (data: string) => void;
-  onInputChange?: (input: HTMLElement | null) => void;
+  onInputElementChange?: (input: HTMLElement | null) => void;
   transformInput?: XtermInputTransform;
   keyMappings?: readonly XtermKeyMapping[];
   onKeyEvent?: (event: KeyboardEvent) => boolean;
@@ -207,7 +207,7 @@ export const XtermTerminal = (props: XtermTerminalProps): JSX.Element => {
         return;
       }
       terminal.open(mount);
-      callbacksRef.current.onInputChange?.(terminal.textarea ?? null);
+      callbacksRef.current.onInputElementChange?.(terminal.textarea ?? null);
       callbacksRef.current
         .createAddons?.()
         .forEach((addon) => terminal.loadAddon(addon));
@@ -230,7 +230,7 @@ export const XtermTerminal = (props: XtermTerminalProps): JSX.Element => {
       data.dispose();
       binary.dispose();
       resize.dispose();
-      callbacksRef.current.onInputChange?.(null);
+      callbacksRef.current.onInputElementChange?.(null);
       terminal.dispose();
       if (terminalRef.current === terminal) {
         terminalRef.current = undefined;

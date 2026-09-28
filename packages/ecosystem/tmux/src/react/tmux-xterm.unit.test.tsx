@@ -49,11 +49,11 @@ vi.mock("@overmux/xterm/react", () => ({
         xterm.cancelPendingInput,
       );
       props.createAddons?.().forEach((addon) => rawTerminal.loadAddon(addon));
-      props.onInputChange?.(inputRef.current);
+      props.onInputElementChange?.(inputRef.current);
       return () => {
         rawTerminal.dispose();
         ready.current = false;
-        props.onInputChange?.(null);
+        props.onInputElementChange?.(null);
       };
     }, []);
     return (
@@ -294,23 +294,25 @@ testCases(
 testCases(
   "registers the xterm wrapper and input for shortcuts until unmount",
   async () => {
-    const onInputChange = vi.fn();
+    const onInputElementChange = vi.fn();
     await act(async () =>
-      root.render(<Harness onInputChange={onInputChange} />),
+      root.render(<Harness onInputElementChange={onInputElementChange} />),
     );
     const target = vi.mocked(useShortcutInputTarget).mock.lastCall?.[0];
     const input = container.querySelector("textarea");
     expect(target?.container.current).toBe(container.firstElementChild);
     expect(target?.input.current).toBe(input);
     expect(target?.container.current?.contains(input)).toBe(true);
-    expect(onInputChange).toHaveBeenCalledWith(input);
+    expect(onInputElementChange).toHaveBeenCalledWith(input);
 
     await act(async () =>
-      root.render(<Harness visible={false} onInputChange={onInputChange} />),
+      root.render(
+        <Harness visible={false} onInputElementChange={onInputElementChange} />,
+      ),
     );
     expect(target?.container.current).toBeNull();
     expect(target?.input.current).toBeNull();
-    expect(onInputChange).toHaveBeenLastCalledWith(null);
+    expect(onInputElementChange).toHaveBeenLastCalledWith(null);
   },
 );
 
