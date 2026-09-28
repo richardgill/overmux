@@ -4,7 +4,7 @@ import { describe, expect, it, test as testCases } from "vitest";
 import { getLLMText, source } from "./source";
 
 const packagePages = [
-  ["git", "Git (experimental)"],
+  ["git", "Git"],
   ["jsonl-store", "JSONL store"],
   ["keybindings", "Keybindings"],
   ["lib", "Runtime library"],

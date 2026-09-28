@@ -1,8 +1,6 @@
 ---
-title: Git (experimental)
+title: Git
 ---
-
-> **Experimental:** compatibility is not guaranteed.
 
 `@overmux/git` provides live Git status and diffs, plus optional operations for staging, unstaging, and discarding changes. Use it to build your own Git diff or review UI.
 
