@@ -1,5 +1,13 @@
 # @overmux/zellij
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`26b2b78`](https://github.com/richardgill/overmux/commit/26b2b789932813bea670cfcc35d9c5fdbbfac193), [`405ec4c`](https://github.com/richardgill/overmux/commit/405ec4c250415a168766b7192dbb7c9c2e991ea9)]:
+  - overmux@0.0.9
+  - @overmux/xterm@0.0.9
+
 ## 0.0.6
 
 ### Patch Changes
