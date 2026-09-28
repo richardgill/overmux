@@ -486,6 +486,8 @@ export class NativeWebViews {
     if (!entry) {
       return;
     }
+    const restoreFocus =
+      !entry.contents.isDestroyed() && entry.contents.isFocused();
     this.#views.delete(id);
     this.#clearPassthrough(entry, false);
     if (!entry.window.isDestroyed()) {
@@ -494,6 +496,9 @@ export class NativeWebViews {
     if (!entry.contents.isDestroyed()) {
       // Do not let an untrusted beforeunload handler retain a surface or block teardown.
       entry.contents.close({ waitForBeforeUnload: false });
+    }
+    if (restoreFocus && !entry.owner.webContents.isDestroyed()) {
+      entry.owner.webContents.focus();
     }
   };
 

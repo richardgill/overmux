@@ -10,6 +10,7 @@ const electron = await vi.hoisted(async () => {
       this.emit("destroyed");
     });
     isDestroyed = () => this.destroyed;
+    isFocused = () => false;
     loadURL = vi.fn((_url: string): Promise<void> => new Promise(() => {}));
     getURL = vi.fn(() => "https://github.com/");
     getZoomFactor = () => 1;
