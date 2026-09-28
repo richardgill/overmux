@@ -16,7 +16,7 @@ Main features:
 
 ## Demo
 
-[![Watch the Overmux demo](./apps/www/public/demo-thumbnail.png)](https://overmux.com/#demo)
+<a href="https://overmux.com/#demo"><img src="./apps/www/public/demo-thumbnail-play.png" alt="Watch the Overmux demo" width="640" /></a>
 
 ## Get started
 
