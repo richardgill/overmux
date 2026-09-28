@@ -5,7 +5,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
+import { createRequire, findPackageJSON } from "node:module";
 import { dirname, resolve } from "node:path";
 import { afterEach, beforeEach, expect, it, test as testCases } from "vitest";
 import {
@@ -15,27 +15,33 @@ import {
 
 const desktopDirectory = resolve(import.meta.dirname, "..");
 const require = createRequire(resolve(desktopDirectory, "package.json"));
-const reactDomRequire = createRequire(
-  require.resolve("react-dom/package.json"),
-);
-const installedPackages = ["react", "react-dom", "scheduler", "zod"].map(
-  (name) => {
-    const manifestPath = (
-      name === "scheduler" ? reactDomRequire : require
-    ).resolve(`${name}/package.json`);
-    const manifest = readFileSync(manifestPath, "utf8");
-    const { version } = JSON.parse(manifest) as { version: string };
-    const license = readFileSync(
-      resolve(dirname(manifestPath), "LICENSE"),
-      "utf8",
-    );
-    const path =
-      name === "scheduler"
-        ? "node_modules/react-dom/node_modules/scheduler"
-        : `node_modules/${name}`;
-    return { name, version, manifest, license, path };
-  },
-);
+const installedPackages = [
+  "@overmux/keybindings",
+  "react",
+  "react-dom",
+  "scheduler",
+  "zod",
+].map((name) => {
+  const basePath =
+    name === "scheduler"
+      ? require.resolve("react-dom/package.json")
+      : resolve(desktopDirectory, "package.json");
+  const manifestPath = findPackageJSON(name, basePath);
+  if (!manifestPath) {
+    throw new Error(`Missing package manifest for ${name}`);
+  }
+  const manifest = readFileSync(manifestPath, "utf8");
+  const { version } = JSON.parse(manifest) as { version: string };
+  const license = readFileSync(
+    resolve(dirname(manifestPath), "LICENSE"),
+    "utf8",
+  );
+  const path =
+    name === "scheduler"
+      ? "node_modules/react-dom/node_modules/scheduler"
+      : `node_modules/${name}`;
+  return { name, version, manifest, license, path };
+});
 let appDir: string;
 
 beforeEach(() => {

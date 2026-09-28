@@ -27,7 +27,7 @@ export default defineConfig({
         index: "src/main/index.ts",
       },
       deps: {
-        onlyBundle: ["zod"],
+        onlyBundle: ["@overmux/keybindings", "zod"],
         neverBundle: ["electron", "jiti"],
       },
       outDir: "dist/main",
