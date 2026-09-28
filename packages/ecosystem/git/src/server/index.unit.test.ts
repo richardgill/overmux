@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import * as fs from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -13,7 +14,6 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import * as chokidar from "chokidar";
 import { afterEach, describe, expect, it, test as testCases, vi } from "vitest";
 import { gitChangesResource, gitDiffResource } from "./index";
 import {
@@ -22,8 +22,8 @@ import {
   type GitComparison,
 } from "../shared";
 
-vi.mock("chokidar", { spy: true });
-const watch = vi.mocked(chokidar.watch);
+vi.mock("node:fs", { spy: true });
+const watch = vi.mocked(fs.watch);
 const exec = promisify(execFile);
 const roots: string[] = [];
 const disposers: (() => void | Promise<void>)[] = [];
@@ -38,6 +38,29 @@ const context = (signal = new AbortController().signal) => ({
   invalidate: vi.fn(),
   signal,
 });
+
+const watchCount = (path: string) =>
+  watch.mock.calls.filter(([watchedPath]) => watchedPath === path).length;
+
+const waitForDirectoryWatch = async (
+  path: string,
+  previousCount = 0,
+  settle = true,
+) => {
+  await vi.waitFor(() =>
+    expect(watchCount(path)).toBeGreaterThan(previousCount),
+  );
+  if (settle) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 400));
+  }
+};
+
+const watcherFor = (path: string) => {
+  const matches = watch.mock.results.filter(
+    (_, index) => watch.mock.calls[index]?.[0] === path,
+  );
+  return matches[matches.length - 1]!.value as fs.FSWatcher;
+};
 
 const git = (root: string, args: string[]) =>
   exec("git", ["-C", root, ...args], {
@@ -485,9 +508,17 @@ describe("shared subscription lifecycle", () => {
       expect(changed).toHaveBeenCalled();
       expect(diffChanged).toHaveBeenCalled();
     });
-    expect(watch).toHaveBeenCalledTimes(1);
-    const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
-    const close = vi.spyOn(watcher, "close");
+    expect(watch).toHaveBeenCalled();
+    expect(watch.mock.calls.map(([path]) => path)).toContain(repoRoot);
+    expect(watch.mock.calls.map(([path]) => path)).toContain(
+      join(repoRoot, ".git"),
+    );
+    expect(watch.mock.calls.filter(([path]) => path === repoRoot)).toHaveLength(
+      1,
+    );
+    const close = watch.mock.results.map((result) =>
+      vi.spyOn(result.value as fs.FSWatcher, "close"),
+    );
     changed.mockClear();
     diffChanged.mockClear();
     // Atomic replacement, followed by a new directory, both need native coverage.
@@ -498,7 +529,7 @@ describe("shared subscription lifecycle", () => {
       expect(diffChanged).toHaveBeenCalled();
     });
     await stopChanges();
-    expect(close).not.toHaveBeenCalled();
+    expect(close.flatMap((spy) => spy.mock.calls)).toHaveLength(0);
     changed.mockClear();
     diffChanged.mockClear();
     await git(repoRoot, ["add", "."]);
@@ -506,14 +537,78 @@ describe("shared subscription lifecycle", () => {
     expect(changed).not.toHaveBeenCalled();
     diffChanged.mockClear();
     await mkdir(join(repoRoot, "new-directory"));
-    await writeFile(join(repoRoot, "new-directory", "new"), "new\n");
+    await vi.waitFor(() => expect(diffChanged).toHaveBeenCalled());
+    await waitForDirectoryWatch(join(repoRoot, "new-directory"));
+    diffChanged.mockClear();
+    await mkdir(join(repoRoot, "new-directory", "deep"));
+    await waitForDirectoryWatch(join(repoRoot, "new-directory", "deep"));
+    diffChanged.mockClear();
+    await writeFile(join(repoRoot, "new-directory", "deep", "new"), "new\n");
+    await vi.waitFor(() => expect(diffChanged).toHaveBeenCalled());
+    diffChanged.mockClear();
+    const incoming = `${repoRoot}-incoming`;
+    roots.push(incoming);
+    await mkdir(join(incoming, "deep"), { recursive: true });
+    await writeFile(join(incoming, "deep", "file"), "initial\n");
+    await rename(incoming, join(repoRoot, "moved-in"));
+    await vi.waitFor(() => expect(diffChanged).toHaveBeenCalled());
+    await waitForDirectoryWatch(join(repoRoot, "moved-in", "deep"));
+    diffChanged.mockClear();
+    await writeFile(join(repoRoot, "moved-in", "deep", "file"), "later\n");
     await vi.waitFor(() => expect(diffChanged).toHaveBeenCalled());
     diffChanged.mockClear();
     await git(repoRoot, ["branch", "new-ref"]);
     await vi.waitFor(() => expect(diffChanged).toHaveBeenCalled());
     await stopDiff();
-    expect(close).toHaveBeenCalledTimes(1);
-    expect(watcher.closed).toBe(true);
+    expect(close.flatMap((spy) => spy.mock.calls)).toHaveLength(close.length);
+  });
+
+  it("updates native scope as ignore and tracked-directory rules change", async () => {
+    const repoRoot = await createRepository();
+    const ignored = join(repoRoot, "ignored", "nested");
+    await mkdir(ignored, { recursive: true });
+    await writeFile(join(repoRoot, ".gitignore"), "ignored/\n");
+    await writeFile(join(ignored, "tracked.txt"), "one\n");
+    const resource = gitChangesResource();
+    const invalidate = vi.fn();
+    disposers.push(
+      await resource.subscribe(input(repoRoot), invalidate, context()),
+    );
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(watchCount(join(repoRoot, "ignored"))).toBe(0);
+
+    invalidate.mockClear();
+    await git(repoRoot, ["add", "-f", "ignored/nested/tracked.txt"]);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await waitForDirectoryWatch(join(repoRoot, "ignored"));
+    await waitForDirectoryWatch(ignored);
+    invalidate.mockClear();
+    await writeFile(join(ignored, "tracked.txt"), "two\n");
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+
+    const ignoredWatcher = watcherFor(join(repoRoot, "ignored"));
+    const closeIgnored = vi.spyOn(ignoredWatcher, "close");
+    invalidate.mockClear();
+    await git(repoRoot, ["rm", "--cached", "-f", "ignored/nested/tracked.txt"]);
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await vi.waitFor(() => expect(closeIgnored).toHaveBeenCalled());
+
+    const previousIgnoredWatches = watchCount(join(repoRoot, "ignored"));
+    invalidate.mockClear();
+    await rm(join(repoRoot, ".gitignore"));
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await waitForDirectoryWatch(
+      join(repoRoot, "ignored"),
+      previousIgnoredWatches,
+    );
+    const deepWatcher = watcherFor(ignored);
+    const closeDeep = vi.spyOn(deepWatcher, "close");
+    invalidate.mockClear();
+    await writeFile(join(ignored, "tracked.txt"), "three\n");
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+
+    await rm(join(repoRoot, "ignored"), { force: true, recursive: true });
+    await vi.waitFor(() => expect(closeDeep).toHaveBeenCalled());
   });
 
   it("does not catch up late subscribers after watcher readiness", async () => {
@@ -543,6 +638,40 @@ describe("shared subscription lifecycle", () => {
     await writeFile(join(repoRoot, "file.txt"), "changed\n");
     await vi.waitFor(() => expect(lateInvalidated).toHaveBeenCalled());
     expect(firstInvalidated).toHaveBeenCalled();
+  });
+
+  it("invalidates repeated same-size edits while Git status stays modified", async () => {
+    const repoRoot = await createRepository();
+    const resource = gitChangesResource();
+    await writeFile(join(repoRoot, "Cargo.lock"), "first\n");
+    await git(repoRoot, ["add", "Cargo.lock"]);
+    await git(repoRoot, ["commit", "-m", "add lockfile"]);
+    const invalidate = vi.fn();
+    disposers.push(
+      await resource.subscribe(input(repoRoot), invalidate, context()),
+    );
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+
+    invalidate.mockClear();
+    await writeFile(join(repoRoot, "Cargo.lock"), "other\n");
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(
+      (await resource.read(input(repoRoot), context())).comparisons.unstaged,
+    ).toEqual([
+      expect.objectContaining({ path: "Cargo.lock", status: "modified" }),
+    ]);
+
+    invalidate.mockClear();
+    await writeFile(join(repoRoot, "Cargo.lock"), "third\n");
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(
+      (await resource.read(input(repoRoot), context())).comparisons.unstaged,
+    ).toEqual([
+      expect.objectContaining({ path: "Cargo.lock", status: "modified" }),
+    ]);
+    expect(await readDiff(repoRoot, "Cargo.lock")).toMatchObject({
+      newContent: "third\n",
+    });
   });
 
   it("covers linked-worktree metadata outside the allowed root and reports current branch divergence", async () => {
@@ -601,88 +730,121 @@ describe("shared subscription lifecycle", () => {
       context(),
     );
     disposers.push(stop);
-    await vi.waitFor(() => expect(watch).toHaveBeenCalledTimes(1));
-    const watcher = watch.mock.results[0]!.value as chokidar.FSWatcher;
+    await vi.waitFor(() => expect(watch).toHaveBeenCalled());
     await stop();
     invalidate.mockClear();
-    watcher.emit("ready");
+    await Promise.resolve();
     expect(invalidate).not.toHaveBeenCalled();
-    expect(watcher.closed).toBe(true);
   });
 
-  testCases.each(["event", "startup", "polling"])(
-    "makes %s watcher failure terminal until resubscription",
-    async (mode) => {
+  it("advances one periodic scan timer without postponing a pending event scan", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const schedule = vi.spyOn(globalThis, "setTimeout");
+    try {
       const repoRoot = await createRepository();
-      const resource = gitChangesResource();
       const invalidate = vi.fn();
-      if (mode === "startup") {
-        watch.mockImplementationOnce(() => {
-          throw new Error("watch unavailable");
-        });
-      }
-      if (mode === "polling") {
-        vi.stubEnv("CHOKIDAR_USEPOLLING", "true");
-      }
-      const stop = await resource.subscribe(
+      const stop = await gitChangesResource().subscribe(
         input(repoRoot),
         invalidate,
         context(),
       );
       disposers.push(stop);
       await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
-      if (mode === "event") {
-        watch.mock.results[0]!.value.emit("error", new Error("ENOSPC"));
-      }
-      await expect(resource.read(input(repoRoot), context())).rejects.toThrow(
-        "resubscribe",
-      );
+      expect(vi.getTimerCount()).toBe(1);
+      schedule.mockClear();
+
+      // Deliver native notifications directly so their clock ordering is deterministic.
+      watcherFor(repoRoot).emit("change", "rename", "new-directory");
+      watcherFor(repoRoot).emit("change", "rename", "another-directory");
+      expect(schedule.mock.calls.map(([, delay]) => delay)).toEqual([75, 250]);
+      expect(vi.getTimerCount()).toBe(2);
+
       await stop();
-      vi.unstubAllEnvs();
-      const recovered = vi.fn();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      schedule.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles external excludes and missed same-status content events", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const repoRoot = await createRepository();
+      const excludes = `${repoRoot}-global-excludes`;
+      const includedConfig = `${repoRoot}-included-config`;
+      roots.push(excludes, includedConfig);
+      await mkdir(join(repoRoot, "externally-ignored"));
+      await writeFile(excludes, "externally-ignored/\n");
+      await writeFile(includedConfig, `[core]\n\texcludesFile = ${excludes}\n`);
+      await git(repoRoot, ["config", "include.path", includedConfig]);
+      const resource = gitChangesResource();
+      const invalidate = vi.fn();
       disposers.push(
-        await resource.subscribe(input(repoRoot), recovered, context()),
+        await resource.subscribe(input(repoRoot), invalidate, context()),
       );
-      await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
-      expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
-        repoRoot,
+      await vi.waitFor(() => expect(watchCount(repoRoot)).toBe(1));
+      expect(watchCount(join(repoRoot, "externally-ignored"))).toBe(0);
+
+      watcherFor(repoRoot).close();
+      await writeFile(excludes, "");
+      await writeFile(join(repoRoot, "file.txt"), "two\n");
+      await vi.advanceTimersByTimeAsync(30_000);
+      await waitForDirectoryWatch(
+        join(repoRoot, "externally-ignored"),
+        0,
+        false,
       );
+      await vi.advanceTimersByTimeAsync(75);
+      expect(
+        (await resource.read(input(repoRoot), context())).comparisons.unstaged,
+      ).toEqual([
+        expect.objectContaining({ path: "file.txt", status: "modified" }),
+      ]);
+
+      await writeFile(join(repoRoot, "file.txt"), "one\n");
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(75);
+      expect(await readDiff(repoRoot, "file.txt")).toMatchObject({
+        newContent: "one\n",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  testCases.each(["error", "close"] as const)(
+    "reinstalls a native handle after unexpected %s during shared reconciliation",
+    async (event) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const repoRoot = await createRepository();
+        const resource = gitChangesResource();
+        const invalidate = vi.fn();
+        disposers.push(
+          await resource.subscribe(input(repoRoot), invalidate, context()),
+        );
+        await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+        const initialRootWatches = watchCount(repoRoot);
+        const watcher = watcherFor(repoRoot);
+
+        if (event === "error") {
+          watcher.emit("error", new Error("ENOSPC"));
+        } else {
+          watcher.close();
+        }
+        await vi.advanceTimersByTimeAsync(30_000);
+        await vi.waitFor(() =>
+          expect(watchCount(repoRoot)).toBe(initialRootWatches + 1),
+        );
+        expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
+          repoRoot,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
-
-  it("keeps each subscription failure until its own cleanup", async () => {
-    const repoRoot = await createRepository();
-    const resource = gitChangesResource();
-    const firstInvalidated = vi.fn();
-    const secondInvalidated = vi.fn();
-    watch.mockImplementationOnce(() => {
-      throw new Error("watch unavailable");
-    });
-    const first = await resource.subscribe(
-      input(repoRoot),
-      firstInvalidated,
-      context(),
-    );
-    disposers.push(first);
-    const second = await resource.subscribe(
-      input(repoRoot),
-      secondInvalidated,
-      context(),
-    );
-    disposers.push(second);
-    await vi.waitFor(() => {
-      expect(firstInvalidated).toHaveBeenCalled();
-      expect(secondInvalidated).toHaveBeenCalled();
-    });
-    await first();
-    await expect(resource.read(input(repoRoot), context())).rejects.toThrow(
-      "resubscribe",
-    );
-    await second();
-    expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
-      repoRoot,
-    );
-  });
 
   it("keeps authorization failures terminal until subscription cleanup", async () => {
     const repoRoot = await createRepository();
@@ -703,26 +865,6 @@ describe("shared subscription lifecycle", () => {
       "resubscribe",
     );
     await stop();
-    expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
-      repoRoot,
-    );
-  });
-
-  it("releases a subscription aborted reentrantly by startup-error invalidation", async () => {
-    const repoRoot = await createRepository();
-    watch.mockImplementationOnce(() => {
-      throw new Error("watch unavailable");
-    });
-    const resource = gitChangesResource();
-    const controller = new AbortController();
-    const invalidate = vi.fn(() => controller.abort());
-    const stop = await resource.subscribe(
-      input(repoRoot),
-      invalidate,
-      context(controller.signal),
-    );
-    await stop();
-    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
     expect((await resource.read(input(repoRoot), context())).repoRoot).toBe(
       repoRoot,
     );
