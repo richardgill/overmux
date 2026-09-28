@@ -1,5 +1,11 @@
 # @overmux/desktop
 
+## 0.0.8
+
+### Patch Changes
+
+- [#33](https://github.com/richardgill/overmux/pull/33) [`0389438`](https://github.com/richardgill/overmux/commit/0389438280c79f6e1cfdd154612f7a8e26fdbd1d) Thanks [@richardgill](https://github.com/richardgill)! - Bundle keyboard binding utilities into the desktop app so release archives exclude dependency source files, and preserve their license in bundled dependency notices.
+
 ## 0.0.7
 
 ### Patch Changes
