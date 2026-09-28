@@ -72,6 +72,10 @@ const workingChunks = async function* ({
       // A stream bounds growth during the read too, unlike a size check + readFile.
       yield Buffer.alloc(0);
 
+      // Cancellation can arrive during filesystem awaits or the yield above.
+      // An already-aborted, non-auto-closing stream can emit its error after
+      // Node's iterator removes its listeners, escaping this try/finally.
+      signal.throwIfAborted();
       for await (const chunk of handle.createReadStream({
         autoClose: false,
         signal,
