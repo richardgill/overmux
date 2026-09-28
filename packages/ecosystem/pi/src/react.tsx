@@ -1,6 +1,6 @@
 import "./styles.css";
 
-import { PierrePatchDiff } from "@overmux/git/react";
+import { PierrePatchDiff } from "./pierre-patch-diff";
 import { ChevronRight, Send, Square } from "lucide-react";
 import {
   type CSSProperties,

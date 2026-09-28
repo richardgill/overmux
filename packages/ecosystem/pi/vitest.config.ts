@@ -17,6 +17,7 @@ export default defineConfig({
           include: [
             "src/composer.unit.test.tsx",
             "src/conversation-metadata.unit.test.tsx",
+            "src/pierre-patch-diff.unit.test.tsx",
             "src/tool-renderers.unit.test.tsx",
           ],
           name: "react",

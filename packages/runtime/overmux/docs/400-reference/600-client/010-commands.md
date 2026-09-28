@@ -158,32 +158,3 @@ const CommandMenu = () => {
 Each entry exposes `id`, `title`, `bindings`, `enabled`, and `execute()`. The list includes disabled commands but excludes commands without a registration.
 
 Each command appears once, even if multiple components register it. `execute()` selects the handler using the current focus and runs it only if enabled.
-
-## Using commands from packages
-
-Packages can export commands to include alongside your own:
-
-```tsx
-import { sourceControlCommands } from "@overmux/git/react";
-
-export const client = defineOvermuxClient({
-  commands: {
-    ...commands,
-    ...sourceControlCommands,
-  },
-  component: App,
-});
-```
-
-Adding commands to the registry does not register their handlers. For this package, pass the commands to `SourceControlView`:
-
-```tsx
-<SourceControlView
-  {...sourceControlProps}
-  commandHandles={sourceControlCommands}
-/>
-```
-
-The view registers handlers for navigating changed files and scrolling diffs. They then appear in `useCommands()` alongside your own registered commands.
-
-Keep command IDs unique when combining registries, and pass the same command objects to the client and the component.
