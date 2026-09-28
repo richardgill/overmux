@@ -20,7 +20,7 @@ Main features:
 
 ## Get started
 
-Get started with Overmux in the docs:
+Get started with Overmux in the [docs](https://overmux.com/docs):
 
 - [Get started](https://overmux.com/docs/getting-started/install-and-run-overmux)
 - [How Overmux works](https://overmux.com/docs/introduction/how-overmux-works)
