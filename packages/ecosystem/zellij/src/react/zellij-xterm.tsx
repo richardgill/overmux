@@ -98,9 +98,9 @@ export const ZellijXterm = ({
     xtermProps.onResize?.(size);
     resize(size);
   };
-  const handleInputChange = (inputElement: HTMLElement | null) => {
+  const handleInputElementChange = (inputElement: HTMLElement | null) => {
     inputRef.current = inputElement;
-    xtermProps.onInputChange?.(inputElement);
+    xtermProps.onInputElementChange?.(inputElement);
   };
   useEffect(() => {
     if (active) {
@@ -120,7 +120,7 @@ export const ZellijXterm = ({
         {...xtermProps}
         onBinary={handleBinary}
         onData={handleData}
-        onInputChange={handleInputChange}
+        onInputElementChange={handleInputElementChange}
         onResize={handleResize}
         ref={xtermRef}
       />

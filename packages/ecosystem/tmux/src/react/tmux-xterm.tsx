@@ -95,9 +95,12 @@ export const TmuxXterm = ({
     xtermProps.onResize?.(size);
     resize(size);
   };
-  const handleInputChange = (nextInput: HTMLElement | null) => {
-    inputRef.current = nextInput;
-    xtermProps.onInputChange?.(nextInput);
+  const handleInputElementChange = (element: HTMLElement | null) => {
+    inputRef.current = element;
+    xtermProps.onInputElementChange?.(element);
+    if (element && active) {
+      xtermRef.current?.focus();
+    }
   };
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export const TmuxXterm = ({
       options={{ scrollback: 0, ...xtermProps.options }}
       onBinary={handleBinary}
       onData={handleData}
-      onInputChange={handleInputChange}
+      onInputElementChange={handleInputElementChange}
       onResize={handleResize}
       ref={xtermRef}
     />
