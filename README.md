@@ -11,7 +11,7 @@ Main features:
 
 - Terminals with tmux + xterm.js plugins
 - Desktop application + mobile PWA
-- Git plugin: `git status` + `git diff` information
+- Git plugin: Build your own diff and review UI
 - Plugins: npm package ecosystem
 
 ## Demo
