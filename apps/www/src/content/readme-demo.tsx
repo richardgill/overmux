@@ -25,6 +25,12 @@ export const READMEParagraph = ({
     return <p {...props} />;
   }
 
+  // Stream loads in the browser; its cross-origin iframe needs an absolute poster URL.
+  const poster =
+    typeof window === "undefined"
+      ? undefined
+      : new URL("/demo-thumbnail.png", window.location.origin).href;
+
   return (
     <div className="aspect-video">
       <Stream
@@ -33,7 +39,7 @@ export const READMEParagraph = ({
         controls
         responsive
         title="Overmux demo"
-        poster={String(image.properties.src)}
+        poster={poster}
       />
     </div>
   );

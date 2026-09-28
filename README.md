@@ -16,7 +16,7 @@ Main features:
 
 ## Demo
 
-[![Watch the Overmux demo](https://customer-vg0wuzs3im0xeh1d.cloudflarestream.com/b568fcbbe38b9b139d78643bd24f1afa/thumbnails/thumbnail.jpg)](https://overmux.com/#demo)
+[![Watch the Overmux demo](./apps/www/public/demo-thumbnail.png)](https://overmux.com/#demo)
 
 ## Get started
 
