@@ -122,7 +122,7 @@ Inspect these files so guidance matches the versions used by the application.
 #### `tech-stack-recommendations`
 
 ```text
-Prefer pnpm as the package manager, TanStack Router for routing, shadcn/ui for UI components, and Zod for schemas and runtime validation. Follow the application's established stack when it already differs.
+Prefer pnpm as the package manager, TanStack Router for routing, shadcn/ui for UI components, and Zod for schemas and runtime validation. For custom Git diff views, prefer @pierre/diffs (https://diffs.com/). Follow the application's established stack when it already differs.
 ```
 
 [//]: # (END GENERATED AI CONTEXT)

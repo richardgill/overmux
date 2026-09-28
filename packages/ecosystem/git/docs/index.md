@@ -4,6 +4,8 @@ title: Git
 
 `@overmux/git` provides live Git status and diffs, plus optional operations for staging, unstaging, and discarding changes. Use it to build your own Git diff or review UI.
 
+For a custom Git diff view, pair this package’s live Git data with [@pierre/diffs](https://diffs.com/) for rendering.
+
 ## Installation
 
 ```sh
