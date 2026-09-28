@@ -1,5 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { nativeWebViewChannels } from "../shared/native-web-view-channels.js";
+import type {
+  NativeWebViewCommand,
+  NativeWebViewBounds,
+  NativeWebViewError,
+} from "../shared/native-web-view.js";
 import { remoteClipboardChannels } from "../shared/remote-clipboard.js";
 import { remoteInstanceChannels } from "../shared/remote-instance.js";
 import { remoteNotificationChannels } from "../shared/remote-notifications.js";
@@ -21,6 +27,7 @@ const electron = vi.hoisted(() => {
       ),
       removeListener: vi.fn((channel: string) => listeners.delete(channel)),
       send: vi.fn(),
+      invoke: vi.fn(async () => undefined),
     },
     listeners,
   };
@@ -52,6 +59,16 @@ type InstanceBridge = {
   report: (identity: { instanceId: string }) => void;
 };
 
+type NativeWebViewBridge = {
+  version: 1;
+  command: (command: NativeWebViewCommand) => Promise<void>;
+  setBounds: (id: string, bounds: NativeWebViewBounds) => void;
+  onLoadError: (
+    callback: (input: { id: string; error: NativeWebViewError }) => void,
+  ) => () => void;
+};
+
+let nativeWebView: NativeWebViewBridge;
 let instance: InstanceBridge;
 let clipboard: ClipboardBridge;
 let notifications: NotificationsBridge;
@@ -62,7 +79,9 @@ beforeAll(async () => {
     clipboard: ClipboardBridge;
     instance: InstanceBridge;
     notifications: NotificationsBridge;
+    nativeWebView: NativeWebViewBridge;
   };
+  nativeWebView = host.nativeWebView;
   instance = host.instance;
   clipboard = host.clipboard;
   notifications = host.notifications;
@@ -87,6 +106,7 @@ describe("remote notification preload", () => {
       version: 1,
       platform: process.platform,
       notifications,
+      nativeWebView,
     });
   });
 
@@ -100,6 +120,38 @@ describe("remote notification preload", () => {
       remoteInstanceChannels.report,
       { instanceId: "work" },
     );
+  });
+
+  it("forwards native view commands and geometry without exposing IPC events", async () => {
+    const command = { type: "create" as const, id: crypto.randomUUID() };
+    await nativeWebView.command(command);
+    expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(
+      nativeWebViewChannels.command,
+      command,
+    );
+    const bounds = { x: 0, y: 0, width: 200, height: 100 };
+    nativeWebView.setBounds(command.id, bounds);
+    expect(electron.ipcRenderer.send).toHaveBeenCalledWith(
+      nativeWebViewChannels.bounds,
+      { id: command.id, bounds },
+    );
+    const callback = vi.fn();
+    const unsubscribe = nativeWebView.onLoadError(callback);
+    const input = {
+      id: command.id,
+      error: {
+        url: "https://example.com",
+        code: "-105",
+        message: "DNS failed",
+      },
+    };
+    electron.listeners.get(nativeWebViewChannels.error)!(
+      { sender: "privileged" },
+      input,
+    );
+    expect(callback).toHaveBeenCalledExactlyOnceWith(input);
+    unsubscribe();
+    expect(electron.listeners.has(nativeWebViewChannels.error)).toBe(false);
   });
 
   it("forwards clipboard writes to the main process", () => {

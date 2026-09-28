@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+import { nativeWebViewChannels } from "../shared/native-web-view-channels.js";
+import type {
+  NativeWebViewCommand,
+  NativeWebViewBounds,
+  NativeWebViewError,
+} from "../shared/native-web-view.js";
 import { remoteClipboardChannels } from "../shared/remote-clipboard.js";
 import { remoteInstanceChannels } from "../shared/remote-instance.js";
 import { remoteNotificationChannels } from "../shared/remote-notifications.js";
@@ -25,6 +31,26 @@ const instance = {
   },
 };
 
+const nativeWebView = {
+  version: 1 as const,
+  command: (command: NativeWebViewCommand): Promise<void> =>
+    ipcRenderer.invoke(nativeWebViewChannels.command, command),
+  setBounds: (id: string, bounds: NativeWebViewBounds) =>
+    ipcRenderer.send(nativeWebViewChannels.bounds, { id, bounds }),
+  onLoadError: (
+    callback: (input: { id: string; error: NativeWebViewError }) => void,
+  ) => {
+    // Never expose the Electron event (and its privileged sender) across the bridge.
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      input: { id: string; error: NativeWebViewError },
+    ) => callback(input);
+    ipcRenderer.on(nativeWebViewChannels.error, listener);
+    return () =>
+      ipcRenderer.removeListener(nativeWebViewChannels.error, listener);
+  },
+};
+
 // Expose only OS identity, never the process object or its environment variables.
 contextBridge.exposeInMainWorld("overmuxHost", {
   version: 1,
@@ -32,4 +58,5 @@ contextBridge.exposeInMainWorld("overmuxHost", {
   clipboard,
   instance,
   notifications,
+  nativeWebView,
 });

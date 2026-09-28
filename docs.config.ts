@@ -237,6 +237,10 @@ export const documentationSources: readonly DocumentationSource[] = [
                   route: "reference/client/shortcuts",
                 },
                 {
+                  source: "400-reference/600-client/030-native-web-view.md",
+                  route: "reference/client/native-web-view",
+                },
+                {
                   source: "400-reference/600-client/200-theming.md",
                   route: "reference/client/theming",
                 },

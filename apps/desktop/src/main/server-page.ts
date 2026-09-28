@@ -14,6 +14,7 @@ import {
 } from "./hosted-navigation.js";
 import { navigateInPage } from "./in-page-navigation.js";
 import { installInstanceReportIpc } from "./instance-report-ipc.js";
+import { NativeWebViews } from "./native-web-views.js";
 import { installRemoteClipboard } from "./remote-clipboard.js";
 import { installRemoteNotifications } from "./remote-notifications.js";
 import { createRemoteView } from "./remote-view.js";
@@ -90,6 +91,7 @@ const waitForPage = async (
 
 export class ServerPage {
   readonly #options: ServerPageOptions;
+  readonly #nativeWebViews: NativeWebViews;
   #active: OwnedPage | undefined;
   #candidate: PendingLoad | undefined;
   #loadGeneration = 0;
@@ -99,6 +101,12 @@ export class ServerPage {
 
   constructor(options: ServerPageOptions) {
     this.#options = options;
+    this.#nativeWebViews = new NativeWebViews({
+      getConfiguredUrl: () => this.#configuredUrl,
+      getRemoteView: () =>
+        this.#active?.hasActiveDocument ? this.#active.view : undefined,
+      getWindow: options.getWindow,
+    });
   }
 
   registerIpc = () => {
@@ -108,6 +116,7 @@ export class ServerPage {
     const getConfiguredUrl = () => this.#configuredUrl;
     const getRemoteView = () => this.#active?.view;
     const disposers = [
+      this.#nativeWebViews.registerIpc(ipcMain),
       installInstanceReportIpc({
         getConfiguredUrl,
         getRemoteView: () =>
@@ -375,6 +384,7 @@ export class ServerPage {
     }
     const { height, width } = window.getContentBounds();
     this.#active.view.setBounds({ height, width, x: 0, y: 0 });
+    this.#nativeWebViews.layout();
   };
 
   focus = () => {
@@ -458,6 +468,9 @@ export class ServerPage {
       },
     };
     const reset = () => {
+      if (this.#active === page) {
+        this.#nativeWebViews.clear();
+      }
       page.instanceId = undefined;
       page.hasActiveDocument = false;
       if (this.#active === page) {
@@ -506,6 +519,7 @@ export class ServerPage {
   };
 
   #removeActive = () => {
+    this.#nativeWebViews.clear();
     const page = this.#active;
     this.#active = undefined;
     if (!page) {

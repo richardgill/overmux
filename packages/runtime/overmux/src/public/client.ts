@@ -14,6 +14,11 @@ export {
   type StreamResult,
 } from "../internal/client/overmux-react";
 export { OvermuxHost } from "../internal/client/host/overmux-host";
+export { NativeWebView } from "../internal/client/native-web-view";
+export type {
+  NativeWebViewProps,
+  NativeWebViewLoadError,
+} from "../internal/client/native-web-view";
 export {
   OvermuxPortal,
   OvermuxThemeScope,
