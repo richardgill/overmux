@@ -170,7 +170,7 @@ describe("stageDocumentationSources", () => {
     expect(
       await readFile(resolve(root, "generated/packages/meta.json"), "utf8"),
     ).toBe(
-      '{\n  "title": "Packages",\n  "pages": [\n    "tmux/index",\n    "xterm/index",\n    "xterm-fork/index",\n    "ai-agents",\n    "jsonl-store/index",\n    "git/index",\n    "zellij/index"\n  ]\n}\n',
+      '{\n  "title": "Packages",\n  "pages": [\n    "tmux/index",\n    "xterm/index",\n    "xterm-fork/index",\n    "git/index",\n    "ai-agents",\n    "jsonl-store/index",\n    "zellij/index"\n  ]\n}\n',
     );
     expect(
       await readFile(
