@@ -1,5 +1,15 @@
 # overmux
 
+## 0.0.9
+
+### Patch Changes
+
+- [#22](https://github.com/richardgill/overmux/pull/22) [`26b2b78`](https://github.com/richardgill/overmux/commit/26b2b789932813bea670cfcc35d9c5fdbbfac193) Thanks [@richardgill](https://github.com/richardgill)! - Allow resource subscriptions to set up asynchronously, safely release cleanup returned after cancellation, and refresh subscribers after setup completes.
+
+- [#17](https://github.com/richardgill/overmux/pull/17) [`405ec4c`](https://github.com/richardgill/overmux/commit/405ec4c250415a168766b7192dbb7c9c2e991ea9) Thanks [@richardgill](https://github.com/richardgill)! - Replace legacy Git source-control resources with independent read-only status and selected-file diff resources. Remove the Git React UI, including its views, navigation commands, stylesheet, and browser exports. Pi now owns the patch renderer it uses directly.
+
+  Preserve resource invalidations received during an active client read so subscribed views refresh after that read settles.
+
 ## 0.0.8
 
 ### Patch Changes

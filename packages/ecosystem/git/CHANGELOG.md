@@ -1,5 +1,24 @@
 # @overmux/git
 
+## 0.0.9
+
+### Patch Changes
+
+- [#17](https://github.com/richardgill/overmux/pull/17) [`405ec4c`](https://github.com/richardgill/overmux/commit/405ec4c250415a168766b7192dbb7c9c2e991ea9) Thanks [@richardgill](https://github.com/richardgill)! - Replace legacy Git source-control resources with independent read-only status and selected-file diff resources. Remove the Git React UI, including its views, navigation commands, stylesheet, and browser exports. Pi now owns the patch renderer it uses directly.
+
+  Preserve resource invalidations received during an active client read so subscribed views refresh after that read settles.
+
+- [#26](https://github.com/richardgill/overmux/pull/26) [`7eef3aa`](https://github.com/richardgill/overmux/commit/7eef3aa4079d420a4adce3ae84466250acf33fee) Thanks [@richardgill](https://github.com/richardgill)! - Prune ignored-only directory trees before installing native Git watchers, retain tracked exceptions and untracked discovery, and reconcile subscribed repositories to recover missed events and watch failures.
+
+- [#25](https://github.com/richardgill/overmux/pull/25) [`0105da2`](https://github.com/richardgill/overmux/commit/0105da2b4a2548ec0dc05bb4eea471cdd0c52fe8) Thanks [@richardgill](https://github.com/richardgill)! - Remove the experimental designation from the Git package documentation.
+
+- [#17](https://github.com/richardgill/overmux/pull/17) [`405ec4c`](https://github.com/richardgill/overmux/commit/405ec4c250415a168766b7192dbb7c9c2e991ea9) Thanks [@richardgill](https://github.com/richardgill)! - Add independent, opt-in Git operation handlers for staging saved files, unstaging, permanently discarding unstaged selections, and applying supplied index-only patches. Require explicit allowed roots and per-operation permissions, validate selected paths, and serialize mutations by canonical repository within the server process. Resources remain read-only and refresh through repository watchers.
+
+  Export `createGitPatch` from `@overmux/git/shared` to create text patches from complete diffs or selected hunks, preserving line endings and supporting index patch reversal.
+
+- Updated dependencies [[`26b2b78`](https://github.com/richardgill/overmux/commit/26b2b789932813bea670cfcc35d9c5fdbbfac193), [`405ec4c`](https://github.com/richardgill/overmux/commit/405ec4c250415a168766b7192dbb7c9c2e991ea9)]:
+  - overmux@0.0.9
+
 ## 0.0.8
 
 ### Patch Changes
