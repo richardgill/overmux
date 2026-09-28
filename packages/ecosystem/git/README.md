@@ -2,8 +2,6 @@
 
 Read-only Git status and selected-file diff resources, with explicitly authorized, opt-in mutation handlers for Overmux.
 
-> **Experimental:** compatibility is not guaranteed.
-
 ## Installation
 
 ```sh

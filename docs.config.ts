@@ -303,7 +303,7 @@ export const documentationSources: readonly DocumentationSource[] = [
     directory: "packages/ecosystem/git/docs",
     website: {
       path: "packages/git",
-      title: "Git (experimental)",
+      title: "Git",
     },
   },
   {
