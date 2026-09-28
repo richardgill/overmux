@@ -3,7 +3,9 @@ import type { ComponentProps } from "react";
 import type { ExtraProps } from "react-markdown";
 
 export const READMEHeading = ({ children }: ComponentProps<"h2">) => (
-  <h2 id={children === "Demo" ? "demo" : undefined}>{children}</h2>
+  <h2 className="scroll-mt-20" id={children === "Demo" ? "demo" : undefined}>
+    {children}
+  </h2>
 );
 
 export const READMEParagraph = ({
