@@ -27,6 +27,8 @@ import {
   type RegisteredCommand,
 } from "./commands";
 import { ShortcutHost, useShortcutInputTarget } from "./shortcuts";
+import { NativeWebView } from "./native-web-view";
+import type { NativeWebViewBridge } from "./host/desktop-host";
 
 const commands = defineCommandRegistry<unknown>()({
   chord: { defaultBindings: [["F12", "D", "D"]], title: "Chord" },
@@ -127,6 +129,19 @@ const CommandEntries = () => (
 
 let container: HTMLDivElement;
 let root: Root;
+let nativeShortcutListener: Parameters<
+  NativeWebViewBridge["onPassthroughShortcut"]
+>[0];
+const nativeWebViewBridge: NativeWebViewBridge = {
+  version: 1,
+  command: vi.fn(async () => {}),
+  onLoadError: vi.fn(() => vi.fn()),
+  onPassthroughShortcut: vi.fn((listener) => {
+    nativeShortcutListener = listener;
+    return vi.fn();
+  }),
+  setBounds: vi.fn(),
+};
 
 const pressKey = (key: string) =>
   window.dispatchEvent(
@@ -158,6 +173,8 @@ beforeEach(() => {
     globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   mediaQueries.clear();
+  vi.clearAllMocks();
+  window.overmuxHost = undefined;
   vi.stubGlobal("matchMedia", (media: string) => {
     const query = mediaQueries.get(media) ?? {
       listeners: new Set(),
@@ -185,6 +202,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  window.overmuxHost = undefined;
   vi.unstubAllGlobals();
 });
 
@@ -268,6 +286,64 @@ describe("scoped keyboard commands", () => {
 
       expect(replayed.mock.calls).toEqual([["F12"], ["f"]]);
       expect(run).not.toHaveBeenCalled();
+    },
+  );
+
+  testCases(
+    "routes native view shortcuts through the scoped command handler",
+    async () => {
+      const run = vi.fn();
+      window.overmuxHost = {
+        version: 1,
+        platform: "linux",
+        nativeWebView: nativeWebViewBridge,
+      };
+      await act(async () =>
+        root.render(
+          <RuntimeHarness>
+            <ChordTarget run={run} />
+            <NativeWebView
+              url="https://example.com"
+              passthroughBindings={[["F12", "D", "D"]]}
+            />
+          </RuntimeHarness>,
+        ),
+      );
+
+      const configure = vi
+        .mocked(nativeWebViewBridge.command)
+        .mock.calls.map(([input]) => input)
+        .filter(({ type }) => type === "configure")
+        .at(-1);
+      expect(configure).toMatchObject({
+        passthroughBindings: [["F12", "D", "D"]],
+      });
+      const id = vi.mocked(nativeWebViewBridge.command).mock.calls[0]![0].id;
+      nativeShortcutListener({ id, binding: ["F12", "D", "D"] });
+      expect(run).toHaveBeenCalledOnce();
+
+      nativeShortcutListener({
+        id: crypto.randomUUID(),
+        binding: ["F12", "D", "D"],
+      });
+      expect(run).toHaveBeenCalledOnce();
+
+      await act(async () =>
+        root.render(
+          <RuntimeHarness>
+            <ChordTarget run={run} />
+            <NativeWebView url="https://example.com" passthroughBindings={[]} />
+          </RuntimeHarness>,
+        ),
+      );
+      expect(vi.mocked(nativeWebViewBridge.command)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ passthroughBindings: [] }),
+      );
+
+      await act(async () => root.render(null));
+      expect(vi.mocked(nativeWebViewBridge.command)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id, type: "destroy" }),
+      );
     },
   );
 

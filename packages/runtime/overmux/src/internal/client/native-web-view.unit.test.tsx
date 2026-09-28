@@ -10,12 +10,19 @@ let root: ReturnType<typeof createRoot>;
 let tick: FrameRequestCallback;
 let bounds = { x: 10, y: 20, width: 300, height: 200 };
 let listener: Parameters<NativeWebViewBridge["onLoadError"]>[0];
+let shortcutListener: Parameters<
+  NativeWebViewBridge["onPassthroughShortcut"]
+>[0];
 const bridge: NativeWebViewBridge = {
   version: 1,
   command: vi.fn(async () => {}),
   setBounds: vi.fn(),
   onLoadError: vi.fn((callback) => {
     listener = callback;
+    return vi.fn();
+  }),
+  onPassthroughShortcut: vi.fn((callback) => {
+    shortcutListener = callback;
     return vi.fn();
   }),
 };
@@ -102,6 +109,7 @@ it("only sends changed URLs, policy and bounds; disposes without waiting for cre
     id: create.id,
     url: "https://github.com/login",
     allowedHttpOrigins: [],
+    passthroughBindings: [],
   });
   await render(null);
   expect(bridge.command).toHaveBeenLastCalledWith({

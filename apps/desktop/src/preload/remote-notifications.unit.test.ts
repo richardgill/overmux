@@ -5,6 +5,7 @@ import type {
   NativeWebViewCommand,
   NativeWebViewBounds,
   NativeWebViewError,
+  NativeWebViewPassthroughShortcut,
 } from "../shared/native-web-view.js";
 import { remoteClipboardChannels } from "../shared/remote-clipboard.js";
 import { remoteInstanceChannels } from "../shared/remote-instance.js";
@@ -65,6 +66,9 @@ type NativeWebViewBridge = {
   setBounds: (id: string, bounds: NativeWebViewBounds) => void;
   onLoadError: (
     callback: (input: { id: string; error: NativeWebViewError }) => void,
+  ) => () => void;
+  onPassthroughShortcut: (
+    callback: (shortcut: NativeWebViewPassthroughShortcut) => void,
   ) => () => void;
 };
 
@@ -152,6 +156,17 @@ describe("remote notification preload", () => {
     expect(callback).toHaveBeenCalledExactlyOnceWith(input);
     unsubscribe();
     expect(electron.listeners.has(nativeWebViewChannels.error)).toBe(false);
+
+    const shortcut = vi.fn();
+    const unsubscribeShortcut = nativeWebView.onPassthroughShortcut(shortcut);
+    const passthrough = { id: command.id, binding: ["F12", "P", "R"] };
+    electron.listeners.get(nativeWebViewChannels.shortcut)!(
+      { sender: "privileged" },
+      passthrough,
+    );
+    expect(shortcut).toHaveBeenCalledExactlyOnceWith(passthrough);
+    unsubscribeShortcut();
+    expect(electron.listeners.has(nativeWebViewChannels.shortcut)).toBe(false);
   });
 
   it("forwards clipboard writes to the main process", () => {

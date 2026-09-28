@@ -1,3 +1,5 @@
+import type { ShortcutBinding } from "@overmux/keybindings";
+
 import type { NativeWebViewLoadError } from "../native-web-view";
 
 // This capability is independently versioned from the host envelope.
@@ -11,6 +13,7 @@ export type NativeWebViewBridge = {
           id: string;
           url: string;
           allowedHttpOrigins: string[];
+          passthroughBindings: readonly ShortcutBinding[];
         },
   ) => Promise<void>;
   setBounds: (
@@ -19,6 +22,9 @@ export type NativeWebViewBridge = {
   ) => void;
   onLoadError: (
     callback: (input: { id: string; error: NativeWebViewLoadError }) => void,
+  ) => () => void;
+  onPassthroughShortcut: (
+    callback: (input: { id: string; binding: ShortcutBinding }) => void,
   ) => () => void;
 };
 

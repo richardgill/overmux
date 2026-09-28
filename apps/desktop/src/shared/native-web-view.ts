@@ -1,3 +1,7 @@
+import {
+  shortcutBindingSchema,
+  type ShortcutBinding,
+} from "@overmux/keybindings";
 import { z } from "zod";
 
 const idSchema = z.string().uuid();
@@ -10,6 +14,13 @@ const boundsSchema = z.object({
 const configuration = {
   url: z.string().max(16_384),
   allowedHttpOrigins: z.array(z.string().max(2_048)).max(100),
+  passthroughBindings: z.array(shortcutBindingSchema).max(100).default([]),
+};
+
+export type NativeWebViewPassthroughBinding = ShortcutBinding;
+export type NativeWebViewPassthroughShortcut = {
+  id: string;
+  binding: NativeWebViewPassthroughBinding;
 };
 
 export const nativeWebViewCommandSchema = z.discriminatedUnion("type", [

@@ -8,9 +8,13 @@ import {
   type RefObject,
 } from "react";
 import {
+  keyBindingSequence,
   matchesKeyBinding,
-  platformBinding,
+  matchesShortcutBindingPrefix,
+  normalizedShortcutBinding,
+  shortcutBindingsEqual,
   type KeyBinding,
+  type ShortcutBinding,
 } from "@overmux/keybindings";
 
 import {
@@ -19,7 +23,6 @@ import {
   shortcutMediaQueries,
   type ClientAppDefinition,
   type CommandHandle,
-  type ShortcutBinding,
 } from "./client-definition";
 import {
   CommandsContext,
@@ -28,25 +31,6 @@ import {
   selectCommandRegistration,
   type RegisteredCommand,
 } from "./commands";
-
-const bindingSequence = (binding: ShortcutBinding): KeyBinding[] =>
-  typeof binding === "string" ? [binding] : [...binding];
-
-const normalizedBinding = (binding: ShortcutBinding): string[] =>
-  bindingSequence(binding).map((key) => platformBinding(key));
-
-const sequenceMatches = (
-  binding: ShortcutBinding,
-  pending: string[],
-  event: KeyboardEvent,
-) => {
-  const sequence = normalizedBinding(binding);
-  return (
-    sequence.length > pending.length &&
-    pending.every((key, index) => sequence[index] === key) &&
-    matchesKeyBinding(sequence[pending.length] as KeyBinding, event)
-  );
-};
 
 const isTextInput = (element: Element | null) =>
   element instanceof HTMLInputElement ||
@@ -67,7 +51,7 @@ const acceptsTextInput = (bindings: readonly ShortcutBinding[]) => {
     return true;
   }
   return bindings.some((binding) => {
-    const sequence = bindingSequence(binding);
+    const sequence = keyBindingSequence(binding);
     return (
       sequence.length > 1 ||
       sequence[0]?.startsWith("F") ||
@@ -133,6 +117,19 @@ const runShortcut = (
   return true;
 };
 
+const canRunNativeWebViewShortcut = (
+  shortcut: Shortcut,
+  registrations: ReadonlySet<RegisteredCommand>,
+  activeElement: Element | null,
+) =>
+  Boolean(
+    selectCommandRegistration(
+      shortcut.command,
+      registrations,
+      activeElement,
+    )?.enabled(),
+  );
+
 export type ShortcutInputTarget = {
   container: RefObject<HTMLElement | null>;
   input: RefObject<HTMLElement | null>;
@@ -142,6 +139,27 @@ type RegisterShortcutInputTarget = (target: ShortcutInputTarget) => () => void;
 const ShortcutInputTargetsContext = createContext<
   RegisterShortcutInputTarget | undefined
 >(undefined);
+
+type NativeWebViewPassthrough = {
+  bindings: (
+    bindings: readonly ShortcutBinding[],
+    source: Element | null,
+  ) => readonly ShortcutBinding[];
+  run: (binding: ShortcutBinding, source: Element | null) => void;
+};
+
+const NativeWebViewPassthroughContext = createContext<
+  NativeWebViewPassthrough | undefined
+>(undefined);
+
+export const useNativeWebViewPassthroughBindings = (
+  bindings: readonly ShortcutBinding[],
+  source: Element | null,
+) =>
+  useContext(NativeWebViewPassthroughContext)?.bindings(bindings, source) ?? [];
+
+export const useNativeWebViewPassthroughShortcut = () =>
+  useContext(NativeWebViewPassthroughContext)?.run;
 
 export const useShortcutInputTarget = (target: ShortcutInputTarget) => {
   const register = useContext(ShortcutInputTargetsContext);
@@ -260,12 +278,34 @@ export const ShortcutHost = ({
     window.addEventListener("focusin", refreshFocus);
     return () => window.removeEventListener("focusin", refreshFocus);
   }, []);
+  const shortcuts = flattenShortcuts(
+    definition,
+    (media) => window.matchMedia(media).matches,
+  );
+  const nativeWebViewPassthrough: NativeWebViewPassthrough = {
+    bindings: (bindings, source) =>
+      bindings.filter((binding) =>
+        shortcuts.some(
+          (shortcut) =>
+            shortcut.bindings.some((candidate) =>
+              shortcutBindingsEqual(binding, candidate),
+            ) && canRunNativeWebViewShortcut(shortcut, registrations, source),
+        ),
+      ),
+    run: (binding, source) => {
+      const shortcut = shortcuts.find(
+        (candidate) =>
+          candidate.bindings.some((candidateBinding) =>
+            shortcutBindingsEqual(binding, candidateBinding),
+          ) && canRunNativeWebViewShortcut(candidate, registrations, source),
+      );
+      if (shortcut) {
+        void executeCommand(shortcut.command, registrations, () => source);
+      }
+    },
+  };
   useEffect(() => {
-    const shortcuts = flattenShortcuts(
-      definition,
-      (media) => window.matchMedia(media).matches,
-    );
-    let pending: string[] = [];
+    let pending: KeyBinding[] = [];
     let pendingEvents: KeyboardEvent[] = [];
     let pendingTarget: ShortcutInputTarget | undefined;
     let timeout: number | undefined;
@@ -302,8 +342,11 @@ export const ShortcutHost = ({
         shortcut.bindings
           .filter(
             (binding) =>
-              sequenceMatches(binding, pending, event) &&
-              canRunShortcut(shortcut, event, registrations),
+              matchesShortcutBindingPrefix({
+                binding,
+                input: event,
+                pending,
+              }) && canRunShortcut(shortcut, event, registrations),
           )
           .map((binding) => ({ binding, shortcut })),
       );
@@ -317,7 +360,7 @@ export const ShortcutHost = ({
       }
       const complete = matches.find(
         ({ binding }) =>
-          normalizedBinding(binding).length === pending.length + 1,
+          normalizedShortcutBinding(binding).length === pending.length + 1,
       );
       if (complete) {
         clearPending();
@@ -336,7 +379,7 @@ export const ShortcutHost = ({
       }
       pending = [
         ...pending,
-        normalizedBinding(matches[0]!.binding)[pending.length]!,
+        normalizedShortcutBinding(matches[0]!.binding)[pending.length]!,
       ];
       pendingEvents = [...pendingEvents, event];
       event.preventDefault();
@@ -364,10 +407,12 @@ export const ShortcutHost = ({
     (media) => window.matchMedia(media).matches,
   );
   return (
-    <ShortcutInputTargetsContext.Provider value={registerInputTarget}>
-      <CommandsContext.Provider value={commands}>
-        {children}
-      </CommandsContext.Provider>
-    </ShortcutInputTargetsContext.Provider>
+    <NativeWebViewPassthroughContext.Provider value={nativeWebViewPassthrough}>
+      <ShortcutInputTargetsContext.Provider value={registerInputTarget}>
+        <CommandsContext.Provider value={commands}>
+          {children}
+        </CommandsContext.Provider>
+      </ShortcutInputTargetsContext.Provider>
+    </NativeWebViewPassthroughContext.Provider>
   );
 };

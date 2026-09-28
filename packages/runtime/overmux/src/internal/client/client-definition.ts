@@ -1,18 +1,23 @@
 import type { OvermuxContrast, OvermuxScheme } from "./theme-scope";
 import type { ComponentType } from "react";
 import {
-  formatKeyBinding,
   keyBindingSchema,
   matchesKeyBinding,
+  shortcutBindingSchema,
   type KeyBinding,
+  type KeySequence,
+  type ShortcutBinding,
 } from "@overmux/keybindings";
-export type { KeyBinding } from "@overmux/keybindings";
+export { formatShortcutBinding } from "@overmux/keybindings";
+export type {
+  KeyBinding,
+  KeySequence,
+  ShortcutBinding,
+} from "@overmux/keybindings";
 import { z } from "zod";
 
 import type { OvermuxServerApi } from "./browser-api";
 
-export type KeySequence = readonly [KeyBinding, KeyBinding, ...KeyBinding[]];
-export type ShortcutBinding = KeyBinding | KeySequence;
 export type ConditionalShortcutBinding = {
   binding: ShortcutBinding;
   when: { media: string };
@@ -23,10 +28,6 @@ export type ChordPrefix = {
   unmatched: "replay-to-focused-input";
 };
 
-const shortcutBindingSchema = z.union([
-  keyBindingSchema,
-  z.array(keyBindingSchema).min(2),
-]);
 const commandBindingSchema = z.union([
   shortcutBindingSchema,
   z.object({
@@ -38,11 +39,6 @@ const chordPrefixSchema = z.object({
   binding: keyBindingSchema,
   unmatched: z.literal("replay-to-focused-input"),
 });
-
-export const formatShortcutBinding = (binding: ShortcutBinding) =>
-  typeof binding === "string"
-    ? formatKeyBinding(binding)
-    : binding.map(formatKeyBinding).join(" ");
 
 type CommandRunResult = Promise<unknown> | unknown;
 type CommandRun<TServerConfig, TParams> = (input: {

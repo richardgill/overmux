@@ -82,6 +82,8 @@ export type KeyBinding =
   | `${"Control" | "Alt"}+Shift+Meta+${ShiftSafeKey}`
   | `Mod+Alt+Shift+${ShiftSafeKey}`
   | `Control+Alt+Shift+Meta+${ShiftSafeKey}`;
+export type KeySequence = readonly [KeyBinding, KeyBinding, ...KeyBinding[]];
+export type ShortcutBinding = KeyBinding | KeySequence;
 
 const shortcutKeys = new Set([
   ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
@@ -171,12 +173,38 @@ export const keyBindingSchema = z.custom<KeyBinding>((value) => {
   );
 }, "Invalid keyboard binding");
 
+export const shortcutBindingSchema = z.union([
+  keyBindingSchema,
+  z.tuple([keyBindingSchema, keyBindingSchema]).rest(keyBindingSchema),
+]);
+
 const isMacPlatform = () =>
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.platform);
 
-export const platformBinding = (binding: KeyBinding) =>
-  binding.replace("Mod", isMacPlatform() ? "Meta" : "Control");
+export const keyBindingSequence = (binding: ShortcutBinding) =>
+  typeof binding === "string" ? [binding] : binding;
+
+export const platformBinding = (binding: KeyBinding, isMac = isMacPlatform()) =>
+  binding.replace("Mod", isMac ? "Meta" : "Control") as KeyBinding;
+
+export const normalizedShortcutBinding = (
+  binding: ShortcutBinding,
+  isMac = isMacPlatform(),
+) => keyBindingSequence(binding).map((key) => platformBinding(key, isMac));
+
+export const shortcutBindingsEqual = (
+  left: ShortcutBinding,
+  right: ShortcutBinding,
+  isMac = isMacPlatform(),
+) =>
+  normalizedShortcutBinding(left, isMac).join("+") ===
+  normalizedShortcutBinding(right, isMac).join("+");
+
+export type KeyBindingInput = Pick<
+  KeyboardEvent,
+  "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
+>;
 
 export const formatKeyBinding = (binding: KeyBinding) => {
   if (!isMacPlatform()) {
@@ -190,7 +218,10 @@ export const formatKeyBinding = (binding: KeyBinding) => {
     .replaceAll("+", " ");
 };
 
-const eventKey = (event: KeyboardEvent) =>
+export const formatShortcutBinding = (binding: ShortcutBinding) =>
+  keyBindingSequence(binding).map(formatKeyBinding).join(" ");
+
+const eventKey = (event: KeyBindingInput) =>
   event.key === " "
     ? "Space"
     : event.key.length === 1
@@ -199,12 +230,12 @@ const eventKey = (event: KeyboardEvent) =>
 
 export const matchesKeyBinding = (
   binding: KeyBinding,
-  event: KeyboardEvent,
+  event: KeyBindingInput,
+  isMac = isMacPlatform(),
 ) => {
   const parts = binding.split("+");
   const key = parts.at(-1);
   const expected = new Set(parts.slice(0, -1));
-  const isMac = isMacPlatform();
   return (
     key === eventKey(event) &&
     event.altKey === expected.has("Alt") &&
@@ -212,5 +243,24 @@ export const matchesKeyBinding = (
     event.ctrlKey ===
       (expected.has("Control") || (expected.has("Mod") && !isMac)) &&
     event.metaKey === (expected.has("Meta") || (expected.has("Mod") && isMac))
+  );
+};
+
+export const matchesShortcutBindingPrefix = ({
+  binding,
+  input,
+  isMac = isMacPlatform(),
+  pending,
+}: {
+  binding: ShortcutBinding;
+  input: KeyBindingInput;
+  isMac?: boolean;
+  pending: readonly KeyBinding[];
+}) => {
+  const sequence = normalizedShortcutBinding(binding, isMac);
+  return (
+    sequence.length > pending.length &&
+    pending.every((key, index) => sequence[index] === key) &&
+    matchesKeyBinding(sequence[pending.length]!, input, isMac)
   );
 };

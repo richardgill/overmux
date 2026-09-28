@@ -14,6 +14,7 @@ const electron = await vi.hoisted(async () => {
     getURL = vi.fn(() => "https://github.com/");
     getZoomFactor = () => 1;
     send = vi.fn();
+    sendInputEvent = vi.fn();
     setWindowOpenHandler = vi.fn();
   }
   class WebContentsView {
@@ -310,6 +311,110 @@ it("handles Electron clearing the view's contents during external destruction", 
   expect(
     test.window.contentView.removeChildView,
   ).toHaveBeenCalledExactlyOnceWith(view);
+  test.dispose();
+});
+
+it("routes configured shortcuts before the site, but leaves ordinary input alone", () => {
+  const test = setup();
+  const view = test.create();
+  test.command({
+    type: "configure",
+    url: "https://github.com/",
+    allowedHttpOrigins: [],
+    passthroughBindings: ["Control+Shift+X", ["F12", "P", "R"]],
+  });
+  const input = (key: string, overrides: Partial<Electron.Input> = {}) => ({
+    alt: false,
+    code: key,
+    control: false,
+    isAutoRepeat: false,
+    isComposing: false,
+    key,
+    location: 0,
+    meta: false,
+    modifiers: [],
+    shift: false,
+    type: "keyDown",
+    ...overrides,
+  });
+  const press = (key: string, overrides: Partial<Electron.Input> = {}) => {
+    const event = { preventDefault: vi.fn() };
+    view.webContents.emit("before-input-event", event, input(key, overrides));
+    return event;
+  };
+
+  const ordinary = press("z");
+  expect(ordinary.preventDefault).not.toHaveBeenCalled();
+
+  const matched = press("x", { control: true, shift: true });
+  expect(matched.preventDefault).toHaveBeenCalledOnce();
+  expect(test.owner.webContents.send).toHaveBeenLastCalledWith(
+    nativeWebViewChannels.shortcut,
+    { id: test.id, binding: "Control+Shift+X" },
+  );
+  expect(
+    press("x", { control: true, isAutoRepeat: true, shift: true })
+      .preventDefault,
+  ).toHaveBeenCalledOnce();
+  press("x", { type: "keyUp" });
+
+  press("F12");
+  const mismatch = press("y");
+  expect(mismatch.preventDefault).toHaveBeenCalledOnce();
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(4);
+  expect(view.webContents.sendInputEvent).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ keyCode: "F12", type: "keyDown" }),
+  );
+
+  const sent = test.owner.webContents.send.mock.calls.length;
+  test.replace();
+  press("x", { control: true, shift: true });
+  expect(test.owner.webContents.send).toHaveBeenCalledTimes(sent);
+
+  test.dispose();
+});
+
+it("replays incomplete native chords after a timeout or mismatch", () => {
+  vi.useFakeTimers();
+  const test = setup();
+  const view = test.create();
+  test.command({
+    type: "configure",
+    url: "https://github.com/",
+    allowedHttpOrigins: [],
+    passthroughBindings: [["F12", "P", "R"]],
+  });
+  const press = (key: string) => {
+    const event = { preventDefault: vi.fn() };
+    view.webContents.emit("before-input-event", event, {
+      alt: false,
+      code: key,
+      control: false,
+      isAutoRepeat: false,
+      isComposing: false,
+      key,
+      location: 0,
+      meta: false,
+      modifiers: [],
+      shift: false,
+      type: "keyDown",
+    });
+    return event;
+  };
+
+  press("F12");
+  press("p");
+  vi.advanceTimersByTime(1_000);
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(4);
+
+  press("F12");
+  expect(press("Escape").preventDefault).toHaveBeenCalledOnce();
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(8);
+  expect(view.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+    expect.objectContaining({ keyCode: "Escape", type: "keyUp" }),
+  );
+  vi.useRealTimers();
   test.dispose();
 });
 

@@ -5,6 +5,7 @@ import type {
   NativeWebViewCommand,
   NativeWebViewBounds,
   NativeWebViewError,
+  NativeWebViewPassthroughShortcut,
 } from "../shared/native-web-view.js";
 import { remoteClipboardChannels } from "../shared/remote-clipboard.js";
 import { remoteInstanceChannels } from "../shared/remote-instance.js";
@@ -48,6 +49,18 @@ const nativeWebView = {
     ipcRenderer.on(nativeWebViewChannels.error, listener);
     return () =>
       ipcRenderer.removeListener(nativeWebViewChannels.error, listener);
+  },
+  onPassthroughShortcut: (
+    callback: (shortcut: NativeWebViewPassthroughShortcut) => void,
+  ) => {
+    // Never expose the Electron event (and its privileged sender) across the bridge.
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      shortcut: NativeWebViewPassthroughShortcut,
+    ) => callback(shortcut);
+    ipcRenderer.on(nativeWebViewChannels.shortcut, listener);
+    return () =>
+      ipcRenderer.removeListener(nativeWebViewChannels.shortcut, listener);
   },
 };
 

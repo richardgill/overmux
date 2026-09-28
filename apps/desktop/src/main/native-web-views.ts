@@ -1,4 +1,10 @@
 import {
+  keyBindingSequence,
+  matchesShortcutBindingPrefix,
+  normalizedShortcutBinding,
+  type KeyBinding,
+} from "@overmux/keybindings";
+import {
   session,
   shell,
   WebContentsView,
@@ -16,6 +22,7 @@ import {
   type NativeWebViewBounds,
   type NativeWebViewCommand,
   type NativeWebViewError,
+  type NativeWebViewPassthroughBinding,
 } from "../shared/native-web-view.js";
 import {
   isNativeWebUrlAllowed,
@@ -29,6 +36,13 @@ type Options = {
   getRemoteView: () => WebContentsView | undefined;
   getWindow: () => BrowserWindow | undefined;
 };
+type PassthroughState = {
+  pending: KeyBinding[];
+  pendingInputs: Electron.Input[];
+  replaying: boolean;
+  suppressedKeys: Set<string>;
+  timeout: ReturnType<typeof setTimeout> | undefined;
+};
 type OwnedView = {
   id: string;
   view: WebContentsView;
@@ -37,8 +51,32 @@ type OwnedView = {
   window: BrowserWindow;
   url: string;
   origins: Set<string>;
+  passthroughBindings: NativeWebViewPassthroughBinding[];
+  passthrough: PassthroughState;
   bounds: NativeWebViewBounds;
 };
+
+const inputKey = (input: Electron.Input) => input.code || input.key;
+
+const keyBindingInput = (input: Electron.Input) => ({
+  altKey: input.alt,
+  ctrlKey: input.control,
+  key: input.key,
+  metaKey: input.meta,
+  shiftKey: input.shift,
+});
+
+const replayKeyCode = (key: string) =>
+  key === " " ? "Space" : key.length === 1 ? key.toUpperCase() : key;
+
+const replayInput = (
+  input: Electron.Input,
+  type: Electron.KeyboardInputEvent["type"],
+): Electron.KeyboardInputEvent => ({
+  keyCode: replayKeyCode(input.key),
+  modifiers: input.modifiers as Electron.KeyboardInputEvent["modifiers"],
+  type,
+});
 
 let nativeSession: Session | undefined;
 const getNativeSession = () => {
@@ -115,7 +153,9 @@ export class NativeWebViews {
     command: Extract<NativeWebViewCommand, { type: "configure" }>,
   ) => {
     const origins = parseAllowedHttpOrigins(command.allowedHttpOrigins);
+    this.#clearPassthrough(existing, true);
     existing.origins = origins;
+    existing.passthroughBindings = command.passthroughBindings;
     if (!isNativeWebUrlAllowed(command.url, origins)) {
       // A revoked HTTP allowance must not leave the old document running. This
       // internal empty page is never an allowed destination for caller/page URLs.
@@ -167,11 +207,20 @@ export class NativeWebViews {
       window,
       url: "",
       origins: new Set(),
+      passthroughBindings: [],
+      passthrough: {
+        pending: [],
+        pendingInputs: [],
+        replaying: false,
+        suppressedKeys: new Set(),
+        timeout: undefined,
+      },
       bounds: { x: 0, y: 0, width: 0, height: 0 },
     };
     this.#views.set(id, entry);
     this.#guardNavigation(entry);
     this.#watchFailures(entry);
+    this.#watchPassthroughShortcuts(entry);
     // Keep the initial surface hidden until the renderer has supplied real geometry.
     view.setVisible(false);
     window.contentView.addChildView(view);
@@ -240,6 +289,136 @@ export class NativeWebViews {
     contents.once("destroyed", () => this.#destroy(entry.id));
   };
 
+  #watchPassthroughShortcuts = (entry: OwnedView) => {
+    entry.contents.on("before-input-event", (event, input) =>
+      this.#handlePassthroughInput(entry, event, input),
+    );
+  };
+
+  #matchingPassthroughBindings = (entry: OwnedView, input: Electron.Input) =>
+    entry.passthroughBindings.filter((binding) =>
+      matchesShortcutBindingPrefix({
+        binding,
+        input: keyBindingInput(input),
+        isMac: process.platform === "darwin",
+        pending: entry.passthrough.pending,
+      }),
+    );
+
+  #handlePassthroughInput = (
+    entry: OwnedView,
+    event: Electron.Event,
+    input: Electron.Input,
+  ) => {
+    // Replayed Electron input can re-enter before-input-event and must reach the page.
+    if (entry.passthrough.replaying) {
+      return;
+    }
+    const key = inputKey(input);
+    if (input.type === "keyUp") {
+      if (entry.passthrough.suppressedKeys.delete(key)) {
+        event.preventDefault();
+      }
+      return;
+    }
+    if (input.type !== "keyDown") {
+      return;
+    }
+    if (input.isAutoRepeat && entry.passthrough.suppressedKeys.has(key)) {
+      event.preventDefault();
+      return;
+    }
+    const matches = this.#matchingPassthroughBindings(entry, input);
+    if (!matches.length) {
+      if (entry.passthrough.pending.length) {
+        event.preventDefault();
+        entry.passthrough.suppressedKeys.add(key);
+        this.#replayPassthrough(entry, [
+          ...entry.passthrough.pendingInputs,
+          input,
+        ]);
+        this.#clearPassthrough(entry, false);
+      }
+      return;
+    }
+    event.preventDefault();
+    entry.passthrough.suppressedKeys.add(key);
+    const complete = matches.find(
+      (binding) =>
+        keyBindingSequence(binding).length ===
+        entry.passthrough.pending.length + 1,
+    );
+    if (complete) {
+      this.#clearPassthrough(entry, false);
+      this.#sendPassthroughShortcut(entry, complete);
+      return;
+    }
+    entry.passthrough.pending = [
+      ...entry.passthrough.pending,
+      normalizedShortcutBinding(matches[0]!, process.platform === "darwin")[
+        entry.passthrough.pending.length
+      ]!,
+    ];
+    entry.passthrough.pendingInputs = [
+      ...entry.passthrough.pendingInputs,
+      input,
+    ];
+    this.#schedulePassthroughTimeout(entry);
+  };
+
+  #schedulePassthroughTimeout = (entry: OwnedView) => {
+    if (entry.passthrough.timeout !== undefined) {
+      clearTimeout(entry.passthrough.timeout);
+    }
+    entry.passthrough.timeout = setTimeout(() => {
+      this.#replayPassthrough(entry, entry.passthrough.pendingInputs);
+      this.#clearPassthrough(entry, false);
+    }, 1_000);
+  };
+
+  #replayPassthrough = (
+    entry: OwnedView,
+    inputs: readonly Electron.Input[],
+  ) => {
+    entry.passthrough.replaying = true;
+    try {
+      inputs.forEach((input) => {
+        entry.contents.sendInputEvent(replayInput(input, "keyDown"));
+        entry.contents.sendInputEvent(replayInput(input, "keyUp"));
+      });
+    } finally {
+      entry.passthrough.replaying = false;
+    }
+  };
+
+  #clearPassthrough = (entry: OwnedView, replay: boolean) => {
+    if (replay && entry.passthrough.pendingInputs.length) {
+      this.#replayPassthrough(entry, entry.passthrough.pendingInputs);
+    }
+    entry.passthrough.pending = [];
+    entry.passthrough.pendingInputs = [];
+    if (entry.passthrough.timeout !== undefined) {
+      clearTimeout(entry.passthrough.timeout);
+      entry.passthrough.timeout = undefined;
+    }
+  };
+
+  #sendPassthroughShortcut = (
+    entry: OwnedView,
+    binding: NativeWebViewPassthroughBinding,
+  ) => {
+    if (
+      this.#views.get(entry.id) === entry &&
+      this.#options.getRemoteView() === entry.owner &&
+      !entry.owner.webContents.isDestroyed()
+    ) {
+      entry.owner.webContents.send(nativeWebViewChannels.shortcut, {
+        id: entry.id,
+        binding,
+      });
+    }
+  };
+
   #bounds = (event: Electron.IpcMainEvent, input: unknown) => {
     if (!this.#isOwner(event)) {
       return;
@@ -286,6 +465,7 @@ export class NativeWebViews {
       return;
     }
     this.#views.delete(id);
+    this.#clearPassthrough(entry, false);
     if (!entry.window.isDestroyed()) {
       entry.window.contentView.removeChildView(entry.view);
     }
