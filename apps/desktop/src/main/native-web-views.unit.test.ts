@@ -91,6 +91,7 @@ const setup = () => {
       return {
         sender: active.webContents,
         senderFrame: active.webContents.mainFrame,
+        view: active,
       };
     },
   };
@@ -314,7 +315,7 @@ it("handles Electron clearing the view's contents during external destruction", 
   test.dispose();
 });
 
-it("routes configured shortcuts before the site, but leaves ordinary input alone", () => {
+it("forwards configured input to its owner, but leaves ordinary input with the site", () => {
   const test = setup();
   const view = test.create();
   test.command({
@@ -348,15 +349,30 @@ it("routes configured shortcuts before the site, but leaves ordinary input alone
 
   const matched = press("x", { control: true, shift: true });
   expect(matched.preventDefault).toHaveBeenCalledOnce();
-  expect(test.owner.webContents.send).toHaveBeenLastCalledWith(
-    nativeWebViewChannels.shortcut,
-    { id: test.id, binding: "Control+Shift+X" },
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+    expect.objectContaining({ keyCode: "X", type: "keyDown" }),
   );
   expect(
     press("x", { control: true, isAutoRepeat: true, shift: true })
       .preventDefault,
   ).toHaveBeenCalledOnce();
   press("x", { type: "keyUp" });
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+    expect.objectContaining({ keyCode: "X", type: "keyUp" }),
+  );
+
+  press("F12");
+  press("F12", { type: "keyUp" });
+  press("p");
+  press("p", { type: "keyUp" });
+  press("r");
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+    expect.objectContaining({ keyCode: "R", type: "keyDown" }),
+  );
+  press("r", { type: "keyUp" });
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenLastCalledWith(
+    expect.objectContaining({ keyCode: "R", type: "keyUp" }),
+  );
 
   press("F12");
   const mismatch = press("y");
@@ -367,10 +383,13 @@ it("routes configured shortcuts before the site, but leaves ordinary input alone
     expect.objectContaining({ keyCode: "F12", type: "keyDown" }),
   );
 
-  const sent = test.owner.webContents.send.mock.calls.length;
-  test.replace();
+  const forwarded = test.owner.webContents.sendInputEvent.mock.calls.length;
+  const replacement = test.replace();
   press("x", { control: true, shift: true });
-  expect(test.owner.webContents.send).toHaveBeenCalledTimes(sent);
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenCalledTimes(
+    forwarded,
+  );
+  expect(replacement.view.webContents.sendInputEvent).not.toHaveBeenCalled();
 
   test.dispose();
 });
@@ -414,8 +433,29 @@ it("replays incomplete native chords after a timeout or mismatch", () => {
   expect(view.webContents.sendInputEvent).toHaveBeenLastCalledWith(
     expect.objectContaining({ keyCode: "Escape", type: "keyUp" }),
   );
-  vi.useRealTimers();
+
+  press("F12");
+  test.command({
+    type: "configure",
+    url: "https://github.com/",
+    allowedHttpOrigins: [],
+    passthroughBindings: [],
+  });
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(10);
+  vi.advanceTimersByTime(1_000);
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(10);
+
+  test.command({
+    type: "configure",
+    url: "https://github.com/",
+    allowedHttpOrigins: [],
+    passthroughBindings: [["F12", "P", "R"]],
+  });
+  press("F12");
   test.dispose();
+  vi.advanceTimersByTime(1_000);
+  expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(10);
+  vi.useRealTimers();
 });
 
 it("positions inside the host and hides zero-size surfaces", () => {

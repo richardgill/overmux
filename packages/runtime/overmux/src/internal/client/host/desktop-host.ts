@@ -23,9 +23,6 @@ export type NativeWebViewBridge = {
   onLoadError: (
     callback: (input: { id: string; error: NativeWebViewLoadError }) => void,
   ) => () => void;
-  onPassthroughShortcut: (
-    callback: (input: { id: string; binding: ShortcutBinding }) => void,
-  ) => () => void;
 };
 
 type DesktopHost = {

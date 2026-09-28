@@ -37,21 +37,21 @@ Give the placeholder a **nonzero width and height**. The component has no defaul
 
 `NativeWebViewProps` and `NativeWebViewLoadError` are exported from `overmux/client`.
 
-| Prop | Type | Behavior |
-| --- | --- | --- |
-| `url` | `string` | Initial URL. Changing this string navigates; rerendering the same URL preserves in-page navigation. |
-| `className` | `string` | Class for the desktop placeholder `div`. |
-| `style` | `React.CSSProperties` | Styles for the desktop placeholder `div`. |
-| `fallback` | `React.ReactNode` | Browser/PWA and unsupported-desktop content. Omit to render nothing there. |
-| `onLoadError` | `(error: NativeWebViewLoadError) => void` | Receives `{ url, code, message }` for main-page load failures, blocked destinations, invalid configuration or bridge errors. |
-| `allowedHttpOrigins` | `string[]` | Exact additional plain-HTTP origins to permit. Defaults to `[]`. |
-| `passthroughBindings` | `ShortcutBinding[]` | Command bindings to handle while the embedded page has focus. Defaults to `[]`. |
+| Prop                  | Type                                      | Behavior                                                                                                                     |
+| --------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `url`                 | `string`                                  | Initial URL. Changing this string navigates; rerendering the same URL preserves in-page navigation.                          |
+| `className`           | `string`                                  | Class for the desktop placeholder `div`.                                                                                     |
+| `style`               | `React.CSSProperties`                     | Styles for the desktop placeholder `div`.                                                                                    |
+| `fallback`            | `React.ReactNode`                         | Browser/PWA and unsupported-desktop content. Omit to render nothing there.                                                   |
+| `onLoadError`         | `(error: NativeWebViewLoadError) => void` | Receives `{ url, code, message }` for main-page load failures, blocked destinations, invalid configuration or bridge errors. |
+| `allowedHttpOrigins`  | `string[]`                                | Exact additional plain-HTTP origins to permit. Defaults to `[]`.                                                             |
+| `passthroughBindings` | `ShortcutBinding[]`                       | Keyboard bindings to forward to the owning UI while the embedded page has focus. Defaults to `[]`.                           |
 
 ## Keyboard passthrough
 
-`passthroughBindings` uses the same binding and chord syntax as [command shortcuts](./shortcuts). A binding is enabled only when it exactly matches an active, enabled command handler in the owning Overmux UI, including command overrides and scoped handler selection. It is intercepted in Electron before the embedded page receives input, then runs that existing command handler. The embedded page remains sandboxed and receives no Overmux bridge or command capability.
+`passthroughBindings` uses the same binding and chord syntax as [command shortcuts](./shortcuts), but does not require a matching command registration. Electron intercepts a completed configured binding before the embedded page receives it and forwards its keyboard input, including modifiers and releases, to the owning Overmux UI. That UI then handles it through its ordinary DOM listeners - for example, a dialog's Escape handler, a local `onKeyDown`, or the normal shortcut host. The embedded page remains sandboxed and receives no Overmux bridge or command capability.
 
-Unconfigured keys, bindings without an enabled matching command, and repeated keys not already consumed by a binding stay with the embedded page. A complete binding runs its command once per physical press. For chords, the native view buffers a matching prefix for one second. A completed chord is consumed; a mismatch or timeout replays the buffered keys to the embedded page. Updating bindings replays and clears pending state; unmounting clears it. Replayed native input follows Electron's input delivery, so websites that depend on trusted browser events or unusual IME composition behavior may not handle replayed chord text exactly like direct typing. Prefer modified keys or function-key prefixes for website-facing chords.
+Unconfigured keys and repeated keys already consumed by a binding stay with the embedded page. A configured single binding is forwarded once per physical press. For chords, the native view buffers a matching prefix for one second, then forwards the complete input sequence to the owning UI exactly once. A mismatch or timeout replays the buffered keys to the embedded page. Updating bindings replays and clears pending state; unmounting clears it. Replayed native input follows Electron's input delivery, so websites that depend on trusted browser events or unusual IME composition behavior may not handle replayed chord text exactly like direct typing. Prefer modified keys or function-key prefixes for website-facing chords.
 
 Fallback content is **not** displayed after a navigation error. A blocked `url` prop clears the native page, including when an HTTP allowance is revoked. Blocked in-page links leave the current page in place. Main-page failures exclude subresource failures and aborted navigation superseded by a newer request. Chromium load errors use numeric codes as strings; policy failures use `ERR_URL_BLOCKED`, bridge/configuration failures use `ERR_DESKTOP_BRIDGE`. Failed system-browser opens use `ERR_OPEN_EXTERNAL`; a native renderer crash reports `ERR_RENDER_PROCESS_GONE` and destroys the surface. Remount to retry after a native renderer crash.
 

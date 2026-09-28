@@ -27,8 +27,6 @@ import {
   type RegisteredCommand,
 } from "./commands";
 import { ShortcutHost, useShortcutInputTarget } from "./shortcuts";
-import { NativeWebView } from "./native-web-view";
-import type { NativeWebViewBridge } from "./host/desktop-host";
 
 const commands = defineCommandRegistry<unknown>()({
   chord: { defaultBindings: [["F12", "D", "D"]], title: "Chord" },
@@ -99,6 +97,19 @@ const ChordTarget = ({ run }: { run: () => void }) => {
   return null;
 };
 
+const Dialog = ({ dismiss }: { dismiss: () => void }) => {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        dismiss();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [dismiss]);
+  return null;
+};
+
 const PassthroughTarget = ({
   onKeyDown,
 }: {
@@ -129,22 +140,8 @@ const CommandEntries = () => (
 
 let container: HTMLDivElement;
 let root: Root;
-let nativeShortcutListener: Parameters<
-  NativeWebViewBridge["onPassthroughShortcut"]
->[0];
-const nativeWebViewBridge: NativeWebViewBridge = {
-  version: 1,
-  command: vi.fn(async () => {}),
-  onLoadError: vi.fn(() => vi.fn()),
-  onPassthroughShortcut: vi.fn((listener) => {
-    nativeShortcutListener = listener;
-    return vi.fn();
-  }),
-  setBounds: vi.fn(),
-};
-
 const pressKey = (key: string) =>
-  window.dispatchEvent(
+  document.dispatchEvent(
     new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }),
   );
 
@@ -290,60 +287,20 @@ describe("scoped keyboard commands", () => {
   );
 
   testCases(
-    "routes native view shortcuts through the scoped command handler",
+    "delivers Escape to a normal dialog listener without a command",
     async () => {
-      const run = vi.fn();
-      window.overmuxHost = {
-        version: 1,
-        platform: "linux",
-        nativeWebView: nativeWebViewBridge,
-      };
+      const dismiss = vi.fn();
       await act(async () =>
         root.render(
           <RuntimeHarness>
-            <ChordTarget run={run} />
-            <NativeWebView
-              url="https://example.com"
-              passthroughBindings={[["F12", "D", "D"]]}
-            />
+            <Dialog dismiss={dismiss} />
           </RuntimeHarness>,
         ),
       );
 
-      const configure = vi
-        .mocked(nativeWebViewBridge.command)
-        .mock.calls.map(([input]) => input)
-        .filter(({ type }) => type === "configure")
-        .at(-1);
-      expect(configure).toMatchObject({
-        passthroughBindings: [["F12", "D", "D"]],
-      });
-      const id = vi.mocked(nativeWebViewBridge.command).mock.calls[0]![0].id;
-      nativeShortcutListener({ id, binding: ["F12", "D", "D"] });
-      expect(run).toHaveBeenCalledOnce();
+      pressKey("Escape");
 
-      nativeShortcutListener({
-        id: crypto.randomUUID(),
-        binding: ["F12", "D", "D"],
-      });
-      expect(run).toHaveBeenCalledOnce();
-
-      await act(async () =>
-        root.render(
-          <RuntimeHarness>
-            <ChordTarget run={run} />
-            <NativeWebView url="https://example.com" passthroughBindings={[]} />
-          </RuntimeHarness>,
-        ),
-      );
-      expect(vi.mocked(nativeWebViewBridge.command)).toHaveBeenLastCalledWith(
-        expect.objectContaining({ passthroughBindings: [] }),
-      );
-
-      await act(async () => root.render(null));
-      expect(vi.mocked(nativeWebViewBridge.command)).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id, type: "destroy" }),
-      );
+      expect(dismiss).toHaveBeenCalledOnce();
     },
   );
 

@@ -39,6 +39,7 @@ type Options = {
 type PassthroughState = {
   pending: KeyBinding[];
   pendingInputs: Electron.Input[];
+  forwardingKeys: Set<string>;
   replaying: boolean;
   suppressedKeys: Set<string>;
   timeout: ReturnType<typeof setTimeout> | undefined;
@@ -69,13 +70,13 @@ const keyBindingInput = (input: Electron.Input) => ({
 const replayKeyCode = (key: string) =>
   key === " " ? "Space" : key.length === 1 ? key.toUpperCase() : key;
 
-const replayInput = (
+const inputEvent = (
   input: Electron.Input,
-  type: Electron.KeyboardInputEvent["type"],
+  type = input.type,
 ): Electron.KeyboardInputEvent => ({
   keyCode: replayKeyCode(input.key),
   modifiers: input.modifiers as Electron.KeyboardInputEvent["modifiers"],
-  type,
+  type: type as Electron.KeyboardInputEvent["type"],
 });
 
 let nativeSession: Session | undefined;
@@ -211,6 +212,7 @@ export class NativeWebViews {
       passthrough: {
         pending: [],
         pendingInputs: [],
+        forwardingKeys: new Set(),
         replaying: false,
         suppressedKeys: new Set(),
         timeout: undefined,
@@ -316,8 +318,17 @@ export class NativeWebViews {
     }
     const key = inputKey(input);
     if (input.type === "keyUp") {
-      if (entry.passthrough.suppressedKeys.delete(key)) {
-        event.preventDefault();
+      if (!entry.passthrough.suppressedKeys.delete(key)) {
+        return;
+      }
+      event.preventDefault();
+      if (entry.passthrough.forwardingKeys.delete(key)) {
+        this.#forwardPassthrough(entry, [input]);
+      } else if (entry.passthrough.pending.length) {
+        entry.passthrough.pendingInputs = [
+          ...entry.passthrough.pendingInputs,
+          input,
+        ];
       }
       return;
     }
@@ -349,8 +360,11 @@ export class NativeWebViews {
         entry.passthrough.pending.length + 1,
     );
     if (complete) {
+      // Forward once the sequence is complete so owner DOM shortcut handling sees it once.
+      const inputs = [...entry.passthrough.pendingInputs, input];
       this.#clearPassthrough(entry, false);
-      this.#sendPassthroughShortcut(entry, complete);
+      entry.passthrough.forwardingKeys.add(key);
+      this.#forwardPassthrough(entry, inputs);
       return;
     }
     entry.passthrough.pending = [
@@ -380,12 +394,21 @@ export class NativeWebViews {
     entry: OwnedView,
     inputs: readonly Electron.Input[],
   ) => {
+    const released = new Set(
+      inputs.filter((input) => input.type === "keyUp").map(inputKey),
+    );
     entry.passthrough.replaying = true;
     try {
-      inputs.forEach((input) => {
-        entry.contents.sendInputEvent(replayInput(input, "keyDown"));
-        entry.contents.sendInputEvent(replayInput(input, "keyUp"));
-      });
+      inputs.forEach((input) =>
+        entry.contents.sendInputEvent(inputEvent(input)),
+      );
+      inputs
+        .filter(
+          (input) => input.type === "keyDown" && !released.has(inputKey(input)),
+        )
+        .forEach((input) =>
+          entry.contents.sendInputEvent(inputEvent(input, "keyUp")),
+        );
     } finally {
       entry.passthrough.replaying = false;
     }
@@ -403,19 +426,18 @@ export class NativeWebViews {
     }
   };
 
-  #sendPassthroughShortcut = (
+  #forwardPassthrough = (
     entry: OwnedView,
-    binding: NativeWebViewPassthroughBinding,
+    inputs: readonly Electron.Input[],
   ) => {
     if (
       this.#views.get(entry.id) === entry &&
       this.#options.getRemoteView() === entry.owner &&
       !entry.owner.webContents.isDestroyed()
     ) {
-      entry.owner.webContents.send(nativeWebViewChannels.shortcut, {
-        id: entry.id,
-        binding,
-      });
+      inputs.forEach((input) =>
+        entry.owner.webContents.sendInputEvent(inputEvent(input)),
+      );
     }
   };
 

@@ -18,10 +18,6 @@ const configuration = {
 };
 
 export type NativeWebViewPassthroughBinding = ShortcutBinding;
-export type NativeWebViewPassthroughShortcut = {
-  id: string;
-  binding: NativeWebViewPassthroughBinding;
-};
 
 export const nativeWebViewCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create"), id: idSchema }),

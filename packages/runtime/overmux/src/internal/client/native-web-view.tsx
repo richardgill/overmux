@@ -1,19 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
 import type { ShortcutBinding } from "@overmux/keybindings";
 
 import type { NativeWebViewBridge } from "./host/desktop-host";
-import {
-  useNativeWebViewPassthroughBindings,
-  useNativeWebViewPassthroughShortcut,
-} from "./shortcuts";
 
 export type NativeWebViewLoadError = {
   url: string;
@@ -102,23 +91,12 @@ export const NativeWebView = ({
       ? undefined
       : window.overmuxHost.nativeWebView;
   const element = useRef<HTMLDivElement>(null);
-  const [passthroughSource, setPassthroughSource] =
-    useState<HTMLDivElement | null>(null);
   const mounted = useRef<MountedView | undefined>(undefined);
-  const runPassthroughShortcut = useNativeWebViewPassthroughShortcut();
-  const activePassthroughBindings = useNativeWebViewPassthroughBindings(
-    passthroughBindings,
-    passthroughSource,
-  );
-  const setElement = useCallback((source: HTMLDivElement | null) => {
-    element.current = source;
-    setPassthroughSource(source);
-  }, []);
-  const latest = useRef({ url, onLoadError, runPassthroughShortcut });
-  latest.current = { url, onLoadError, runPassthroughShortcut };
+  const latest = useRef({ url, onLoadError });
+  latest.current = { url, onLoadError };
   // Equal array contents are not a navigation or a policy change.
   const origins = JSON.stringify(allowedHttpOrigins);
-  const bindings = JSON.stringify(activePassthroughBindings);
+  const bindings = JSON.stringify(passthroughBindings);
 
   useEffect(() => {
     if (!bridge || !element.current) {
@@ -143,13 +121,6 @@ export const NativeWebView = ({
         view.report(error);
       }
     });
-    const unsubscribeShortcut = bridge.onPassthroughShortcut(
-      ({ id, binding }) => {
-        if (id === view.id) {
-          latest.current.runPassthroughShortcut?.(binding, element.current);
-        }
-      },
-    );
     void command(view, { type: "create", id: view.id }, latest.current.url);
     const stopTracking = trackBounds(element.current, view);
     return () => {
@@ -157,7 +128,6 @@ export const NativeWebView = ({
       mounted.current = undefined;
       stopTracking();
       unsubscribe();
-      unsubscribeShortcut();
       // Creation and destruction are ordered commands, not asynchronous load waits.
       void command(view, { type: "destroy", id: view.id }, latest.current.url);
     };
@@ -181,7 +151,7 @@ export const NativeWebView = ({
   }, [bindings, bridge, url, origins]);
 
   return bridge ? (
-    <div ref={setElement} className={className} style={style} />
+    <div ref={element} className={className} style={style} />
   ) : (
     <>{fallback}</>
   );

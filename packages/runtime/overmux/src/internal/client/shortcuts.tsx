@@ -12,7 +12,6 @@ import {
   matchesKeyBinding,
   matchesShortcutBindingPrefix,
   normalizedShortcutBinding,
-  shortcutBindingsEqual,
   type KeyBinding,
   type ShortcutBinding,
 } from "@overmux/keybindings";
@@ -117,19 +116,6 @@ const runShortcut = (
   return true;
 };
 
-const canRunNativeWebViewShortcut = (
-  shortcut: Shortcut,
-  registrations: ReadonlySet<RegisteredCommand>,
-  activeElement: Element | null,
-) =>
-  Boolean(
-    selectCommandRegistration(
-      shortcut.command,
-      registrations,
-      activeElement,
-    )?.enabled(),
-  );
-
 export type ShortcutInputTarget = {
   container: RefObject<HTMLElement | null>;
   input: RefObject<HTMLElement | null>;
@@ -139,27 +125,6 @@ type RegisterShortcutInputTarget = (target: ShortcutInputTarget) => () => void;
 const ShortcutInputTargetsContext = createContext<
   RegisterShortcutInputTarget | undefined
 >(undefined);
-
-type NativeWebViewPassthrough = {
-  bindings: (
-    bindings: readonly ShortcutBinding[],
-    source: Element | null,
-  ) => readonly ShortcutBinding[];
-  run: (binding: ShortcutBinding, source: Element | null) => void;
-};
-
-const NativeWebViewPassthroughContext = createContext<
-  NativeWebViewPassthrough | undefined
->(undefined);
-
-export const useNativeWebViewPassthroughBindings = (
-  bindings: readonly ShortcutBinding[],
-  source: Element | null,
-) =>
-  useContext(NativeWebViewPassthroughContext)?.bindings(bindings, source) ?? [];
-
-export const useNativeWebViewPassthroughShortcut = () =>
-  useContext(NativeWebViewPassthroughContext)?.run;
 
 export const useShortcutInputTarget = (target: ShortcutInputTarget) => {
   const register = useContext(ShortcutInputTargetsContext);
@@ -282,28 +247,6 @@ export const ShortcutHost = ({
     definition,
     (media) => window.matchMedia(media).matches,
   );
-  const nativeWebViewPassthrough: NativeWebViewPassthrough = {
-    bindings: (bindings, source) =>
-      bindings.filter((binding) =>
-        shortcuts.some(
-          (shortcut) =>
-            shortcut.bindings.some((candidate) =>
-              shortcutBindingsEqual(binding, candidate),
-            ) && canRunNativeWebViewShortcut(shortcut, registrations, source),
-        ),
-      ),
-    run: (binding, source) => {
-      const shortcut = shortcuts.find(
-        (candidate) =>
-          candidate.bindings.some((candidateBinding) =>
-            shortcutBindingsEqual(binding, candidateBinding),
-          ) && canRunNativeWebViewShortcut(candidate, registrations, source),
-      );
-      if (shortcut) {
-        void executeCommand(shortcut.command, registrations, () => source);
-      }
-    },
-  };
   useEffect(() => {
     let pending: KeyBinding[] = [];
     let pendingEvents: KeyboardEvent[] = [];
@@ -407,12 +350,10 @@ export const ShortcutHost = ({
     (media) => window.matchMedia(media).matches,
   );
   return (
-    <NativeWebViewPassthroughContext.Provider value={nativeWebViewPassthrough}>
-      <ShortcutInputTargetsContext.Provider value={registerInputTarget}>
-        <CommandsContext.Provider value={commands}>
-          {children}
-        </CommandsContext.Provider>
-      </ShortcutInputTargetsContext.Provider>
-    </NativeWebViewPassthroughContext.Provider>
+    <ShortcutInputTargetsContext.Provider value={registerInputTarget}>
+      <CommandsContext.Provider value={commands}>
+        {children}
+      </CommandsContext.Provider>
+    </ShortcutInputTargetsContext.Provider>
   );
 };

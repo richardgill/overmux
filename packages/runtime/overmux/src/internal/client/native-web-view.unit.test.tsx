@@ -10,19 +10,12 @@ let root: ReturnType<typeof createRoot>;
 let tick: FrameRequestCallback;
 let bounds = { x: 10, y: 20, width: 300, height: 200 };
 let listener: Parameters<NativeWebViewBridge["onLoadError"]>[0];
-let shortcutListener: Parameters<
-  NativeWebViewBridge["onPassthroughShortcut"]
->[0];
 const bridge: NativeWebViewBridge = {
   version: 1,
   command: vi.fn(async () => {}),
   setBounds: vi.fn(),
   onLoadError: vi.fn((callback) => {
     listener = callback;
-    return vi.fn();
-  }),
-  onPassthroughShortcut: vi.fn((callback) => {
-    shortcutListener = callback;
     return vi.fn();
   }),
 };
@@ -117,6 +110,23 @@ it("only sends changed URLs, policy and bounds; disposes without waiting for cre
     id: create.id,
   });
   expect(cancelAnimationFrame).toHaveBeenCalled();
+});
+
+it("forwards configured passthrough bindings without requiring a shortcut host", async () => {
+  await render(
+    <NativeWebView
+      url="https://github.com"
+      passthroughBindings={["Escape", ["F12", "P", "R"]]}
+    />,
+  );
+
+  expect(bridge.command).toHaveBeenLastCalledWith({
+    type: "configure",
+    id: expect.any(String),
+    url: "https://github.com",
+    allowedHttpOrigins: [],
+    passthroughBindings: ["Escape", ["F12", "P", "R"]],
+  });
 });
 
 it("reports bridge and navigation errors with the latest callback, never replacing the placeholder", async () => {
