@@ -8,7 +8,12 @@ import { READMEHeading, READMEParagraph } from "@/content/readme-demo";
 const githubLicenseUrl =
   "https://github.com/richardgill/overmux/blob/main/LICENSE";
 
-const homepageMarkdown = readme.replace(/^> \[!NOTE\]\n> /, "> ");
+const homepageMarkdown = readme
+  .replace(/^> \[!NOTE\]\n> /, "> ")
+  .replace(
+    '<a href="https://overmux.com/#demo"><img src="./apps/www/public/demo-thumbnail-play.png" alt="Watch the Overmux demo" width="640" /></a>',
+    "[![Watch the Overmux demo](./apps/www/public/demo-thumbnail-play.png)](https://overmux.com/#demo)",
+  );
 
 const resolvedREADMEHref = (href: string | undefined) => {
   if (href === "./LICENSE") {
