@@ -20,6 +20,8 @@ const subscription = {
   unsubscribe: vi.fn().mockResolvedValue(true),
 };
 
+const activeWorker = Object.assign(new EventTarget(), { state: "activated" });
+
 let container: HTMLDivElement;
 let root: Root;
 let serviceWorkerDescriptor: PropertyDescriptor | undefined;
@@ -73,7 +75,10 @@ describe("background notification controls", () => {
         getRegistration: vi.fn(async () => ({
           pushManager: { getSubscription },
         })),
-        ready: Promise.resolve({ pushManager: { getSubscription } }),
+        register: vi.fn(async () => ({
+          active: activeWorker,
+          pushManager: { getSubscription },
+        })),
       },
     });
 
@@ -122,9 +127,10 @@ describe("background notification controls", () => {
       configurable: true,
       value: {
         getRegistration: vi.fn(),
-        ready: Promise.resolve({
+        register: vi.fn(async () => ({
+          active: activeWorker,
           pushManager: { getSubscription, subscribe },
-        }),
+        })),
       },
     });
 
@@ -190,9 +196,10 @@ describe("background notification controls", () => {
         getRegistration: vi.fn(async () => ({
           pushManager: { getSubscription, subscribe },
         })),
-        ready: Promise.resolve({
+        register: vi.fn(async () => ({
+          active: activeWorker,
           pushManager: { getSubscription, subscribe },
-        }),
+        })),
         removeEventListener: vi.fn(),
       },
     });

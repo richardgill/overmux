@@ -41,7 +41,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "node ../../../scripts/generate-ai-context-docs.ts && rm -rf dist && vite build && vite build --config vite.auth.config.ts && vp pack && node scripts/clean-declarations.ts && node scripts/add-client-styles.mjs && cp -R docs dist/docs",
+    "build": "node ../../../scripts/generate-ai-context-docs.ts && rm -rf dist && vite build && vite build --config vite.auth.config.ts && vite build --config vite.push.config.ts && vp pack && node scripts/clean-declarations.ts && node scripts/add-client-styles.mjs && cp -R docs dist/docs",
     "dev": "pnpm run dev:cli",
     "dev:cli": "node --import jiti/register src/internal/cli/bin.ts serve",
     "serve": "node dist/bin.js serve",

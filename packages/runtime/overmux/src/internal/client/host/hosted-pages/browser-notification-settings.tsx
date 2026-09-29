@@ -25,6 +25,7 @@ const statusMessage = (status: BackgroundNotificationStatus) => {
 export const BrowserNotificationSettings = () => {
   const [status, setStatus] =
     useState<BackgroundNotificationStatus>("checking");
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -35,8 +36,9 @@ export const BrowserNotificationSettings = () => {
             setStatus(next);
           }
         })
-        .catch(() => {
+        .catch((cause: unknown) => {
           if (active) {
+            setError(cause instanceof Error ? cause.message : undefined);
             setStatus("error");
           }
         });
@@ -70,7 +72,8 @@ export const BrowserNotificationSettings = () => {
             ? "denied"
             : "disabled",
       );
-    } catch {
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : undefined);
       setStatus("error");
     }
   }, []);
@@ -80,7 +83,8 @@ export const BrowserNotificationSettings = () => {
       setStatus("checking");
       await disableBackgroundNotifications();
       setStatus("disabled");
-    } catch {
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : undefined);
       setStatus("error");
     }
   }, []);
@@ -92,6 +96,7 @@ export const BrowserNotificationSettings = () => {
       <h3>Browser notifications</h3>
       <p aria-live="polite" data-om-background-notifications-status="">
         {statusMessage(status)}
+        {status === "error" && error ? ` ${error}` : null}
       </p>
       <div data-om-hosted-actions="">
         {canEnable ? (
