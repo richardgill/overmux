@@ -5,6 +5,8 @@ import {
   backgroundNotificationSubscriptionSchema,
 } from "../shared/index";
 
+import { registerPushWorker } from "./register-push-worker";
+
 const enabledStorageKey = "overmux.backgroundNotificationsEnabled";
 
 export type BackgroundNotificationStatus =
@@ -132,7 +134,7 @@ const removeCurrentSubscription = async () => {
 };
 
 const reconcileBackgroundNotifications = async () => {
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await registerPushWorker();
   const publicKey = await getPublicKey();
   let subscription = await registration.pushManager.getSubscription();
   const subscriptionKey = subscription

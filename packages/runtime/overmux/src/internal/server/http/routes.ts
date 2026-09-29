@@ -1,6 +1,8 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Handler, Hono, MiddlewareHandler } from "hono";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   createHttpAuthenticationHandlers,
@@ -138,6 +140,23 @@ export const registerHttpRoutes = ({
       handler: authentication.authenticate,
     },
     // BEGIN: AUTHENTICATED
+    // Runtime-owned in both Vite development and production; never the SPA fallback.
+    {
+      method: "GET",
+      path: "/sw.js",
+      handler: async (context) => {
+        const script = await readFile(
+          fileURLToPath(
+            new URL("../push/sw.js", import.meta.resolve("overmux")),
+          ),
+          "utf8",
+        );
+        context.header("Cache-Control", "no-cache");
+        context.header("Content-Type", "text/javascript; charset=UTF-8");
+        context.header("X-Content-Type-Options", "nosniff");
+        return context.body(script);
+      },
+    },
     {
       method: "POST",
       path: "/api/auth/logout",

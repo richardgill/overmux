@@ -269,6 +269,124 @@ test.describe("authenticated Vite app", () => {
       .toBe("open");
   });
 
+  test("enables background push with a real worker and reconciles on reopen", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["notifications"]);
+    // The push provider is external infrastructure. Keep actual registration,
+    // activation, permission, runtime HTTP, and subscription persistence real.
+    await page.addInitScript(() => {
+      const storageKey = "test.pushSubscriptionKey";
+      const subscription = (key: number[]) => ({
+        endpoint: "https://push.test/browser-integration",
+        expirationTime: null,
+        options: { applicationServerKey: new Uint8Array(key).buffer },
+        toJSON: () => ({ keys: { auth: "auth-key", p256dh: "p256-key" } }),
+        unsubscribe: async () => {
+          localStorage.removeItem(storageKey);
+          return true;
+        },
+      });
+      Object.defineProperties(PushManager.prototype, {
+        getSubscription: {
+          value: async () => {
+            const key = localStorage.getItem(storageKey);
+            return key ? subscription(JSON.parse(key)) : null;
+          },
+        },
+        subscribe: {
+          value: async (options: PushSubscriptionOptionsInit) => {
+            const registration =
+              await navigator.serviceWorker.getRegistration("/");
+            if (registration?.active?.state !== "activated") {
+              throw new Error("Subscribe requires an activated worker");
+            }
+            const key = Array.from(options.applicationServerKey as Uint8Array);
+            localStorage.setItem(storageKey, JSON.stringify(key));
+            return subscription(key);
+          },
+        },
+      });
+    });
+    await page.goto("/_overmux/settings");
+    const status = page.locator("[data-om-background-notifications-status]");
+    await expect(status).toContainText("disabled");
+
+    const publicKey = page.waitForResponse(
+      "**/api/background-notifications/public-key",
+    );
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/background-notifications/subscription") &&
+        response.request().method() === "PUT",
+    );
+    await page.locator("[data-om-background-notifications-enable]").click();
+    expect((await publicKey).ok()).toBe(true);
+    expect((await saved).ok()).toBe(true);
+    await expect(status).toContainText("enabled");
+    expect(
+      await page.evaluate(async () => {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        return {
+          scope: registration?.scope,
+          script: registration?.active?.scriptURL,
+          state: registration?.active?.state,
+        };
+      }),
+    ).toEqual({
+      scope: "http://127.0.0.1:4210/",
+      script: "http://127.0.0.1:4210/sw.js",
+      state: "activated",
+    });
+    const workerResponse = await page.request.get("/sw.js");
+    expect(workerResponse.headers()["content-type"]).toContain("javascript");
+    expect(workerResponse.headers()["cache-control"]).toBe("no-cache");
+
+    const reconciled = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/background-notifications/subscription") &&
+        response.request().method() === "PUT",
+    );
+    await page.reload();
+    expect((await reconciled).ok()).toBe(true);
+    await expect(status).toContainText("enabled");
+    const removed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/background-notifications/subscription") &&
+        response.request().method() === "DELETE",
+    );
+    await page.locator("[data-om-background-notifications-disable]").click();
+    expect((await removed).ok()).toBe(true);
+    await expect(status).toContainText("disabled");
+  });
+
+  test("surfaces a real service-worker registration failure instead of staying checking", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["notifications"]);
+    await page.addInitScript(() => {
+      const register = navigator.serviceWorker.register.bind(
+        navigator.serviceWorker,
+      );
+      // A missing script receives the Vite HTML fallback: the browser rejects its MIME type.
+      navigator.serviceWorker.register = () =>
+        register("/missing-push-worker.js");
+    });
+    await page.goto("/_overmux/settings");
+    await page.locator("[data-om-background-notifications-enable]").click();
+    await expect(
+      page.locator("[data-om-background-notifications-status]"),
+    ).toContainText("could not be updated");
+    await expect(
+      page.locator("[data-om-background-notifications-status]"),
+    ).not.toContainText("Checking");
+    await expect(
+      page.locator("[data-om-background-notifications-enable]"),
+    ).toBeVisible();
+  });
+
   test("closes the Vite HMR socket when its session logs out", async ({
     page,
   }) => {

@@ -264,6 +264,13 @@ describe("serve packaged CLI", () => {
 
       expect(response.status).toBe(200);
       expect(await response.text()).toContain("existing production");
+      const worker = await fetch(`${url}/sw.js`, {
+        headers: { authorization: `Bearer ${credential.bearer.token}` },
+      });
+      expect(worker.status).toBe(200);
+      expect(worker.headers.get("content-type")).toContain("javascript");
+      expect(worker.headers.get("cache-control")).toBe("no-cache");
+      expect(await worker.text()).toContain("notificationclick");
       await assertPortReleased(configuredPort!);
     } finally {
       await cleanupProcessGroup(cli);

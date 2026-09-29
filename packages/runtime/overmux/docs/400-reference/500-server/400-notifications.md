@@ -30,3 +30,7 @@ export const serverConfig = defineOvermuxServer({
 - `open.link`: optional destination to open when the notification is activated. Use an app-relative path starting with `/` or an HTTP(S) URL without credentials.
 
 Each text field and link has a maximum length of 4,096 characters. `send()` returns `Promise<void>`.
+
+## PWA background notifications
+
+Open `/_overmux/settings` on your Overmux server, and enable browser notifications. This requires HTTPS, or localhost for development. See [Hosted pages](../../500-hosted-pages.md) for adding a settings link to your application.
