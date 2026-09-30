@@ -1,7 +1,7 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Handler, Hono, MiddlewareHandler } from "hono";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -23,7 +23,11 @@ import { createOperationHandler } from "./operation-handler";
 import { createRequestLoggingMiddleware } from "./request-logging";
 import { createRuntimeManifestHandler } from "./runtime-manifest-handler";
 import { overmuxLogoutPath, overmuxSettingsPath } from "@overmux/shared";
-import { viteInfrastructurePath } from "../../shared/routes";
+import {
+  pushNotificationBadgePath,
+  pushNotificationIconPath,
+  viteInfrastructurePath,
+} from "../../shared/routes";
 
 // Registration order is the public/protected boundary. Authentication state,
 // login, and health are registered before the session gate; runtime APIs and
@@ -107,6 +111,28 @@ export const registerHttpRoutes = ({
       handler: createRequestLoggingMiddleware({ serverLogger }),
     },
     // BEGIN: UNAUTHENTICATED
+    // Public branding must remain fetchable when a push wakes the worker after
+    // session expiry. Serve only these packaged PNGs, never userland assets.
+    ...[pushNotificationIconPath, pushNotificationBadgePath].map(
+      (path): RouteDescriptor => ({
+        method: "GET",
+        path,
+        handler: async (context) => {
+          const asset = await readFile(
+            fileURLToPath(
+              new URL(
+                `../push/${basename(path)}`,
+                import.meta.resolve("overmux"),
+              ),
+            ),
+          );
+          context.header("Cache-Control", "public, max-age=86400");
+          context.header("Content-Type", "image/png");
+          context.header("X-Content-Type-Options", "nosniff");
+          return context.body(new Uint8Array(asset));
+        },
+      }),
+    ),
     {
       method: "GET",
       path: "/_overmux/auth-shell/*",
