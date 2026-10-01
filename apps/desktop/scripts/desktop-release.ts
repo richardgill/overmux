@@ -100,6 +100,7 @@ const assertAppArchive = (archivePath: string) => {
     "/dist/main/index.js",
     "/dist/main/preload.cjs",
     "/dist/renderer/index.html",
+    "/dist/renderer/icon.png",
     "/node_modules/jiti/lib/jiti.mjs",
     "/node_modules/jiti/LICENSE",
     "/package.json",

@@ -4,6 +4,7 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   base: "./",
+  publicDir: "build",
   build: {
     outDir: "dist/renderer",
     rollupOptions: {
