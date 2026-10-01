@@ -270,7 +270,36 @@ describe("serve packaged CLI", () => {
       expect(worker.status).toBe(200);
       expect(worker.headers.get("content-type")).toContain("javascript");
       expect(worker.headers.get("cache-control")).toBe("no-cache");
-      expect(await worker.text()).toContain("notificationclick");
+      const workerScript = await worker.text();
+      expect(workerScript).toContain("notificationclick");
+
+      // Notification branding ships with the CLI, not the application build,
+      // and remains available without credentials after a browser session expires.
+      for (const { name, size } of [
+        { name: "icon", size: 192 },
+        { name: "badge", size: 96 },
+      ]) {
+        const path = `/_overmux/push/${name}.png`;
+        expect(workerScript).toContain(path);
+        const asset = await fetch(`${url}${path}`);
+        expect(asset.status).toBe(200);
+        expect(asset.headers.get("content-type")).toBe("image/png");
+        expect(asset.headers.get("cache-control")).toBe(
+          "public, max-age=86400",
+        );
+        expect(asset.headers.get("x-content-type-options")).toBe("nosniff");
+        const png = Buffer.from(await asset.arrayBuffer());
+        expect(png.subarray(0, 8)).toEqual(
+          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        );
+        expect(png.readUInt32BE(16)).toBe(size);
+        expect(png.readUInt32BE(20)).toBe(size);
+        expect(png[25]).toBe(6); // RGBA, including transparency for Android's mask.
+      }
+      const unknownAsset = await fetch(`${url}/_overmux/push/missing.png`, {
+        headers: { authorization: `Bearer ${credential.bearer.token}` },
+      });
+      expect(unknownAsset.status).toBe(404);
       await assertPortReleased(configuredPort!);
     } finally {
       await cleanupProcessGroup(cli);

@@ -54,6 +54,8 @@ it("validates and displays the existing server payload", async () => {
 
   expect(showNotification).toHaveBeenCalledWith("Build finished", {
     body: "Ready to review",
+    icon: "/_overmux/push/icon.png?v=2",
+    badge: "/_overmux/push/badge.png",
     data: { link: "/tmux/1?pane=2#output" },
   });
   expect([...listeners.keys()]).toEqual([

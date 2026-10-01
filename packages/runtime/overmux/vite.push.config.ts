@@ -5,6 +5,9 @@ import { bundledDependencyNotices } from "./scripts/bundled-dependency-notices";
 
 // Ship a self-contained classic worker, independent of userland's Vite mode/build.
 export default defineConfig({
+  // PNGs reuse apps/www/public/favicon.svg: a 192px logo and a 96px white,
+  // transparent ring for Android's monochrome status-bar mask.
+  publicDir: "src/internal/client/push-assets",
   build: {
     emptyOutDir: false,
     outDir: "dist/push",

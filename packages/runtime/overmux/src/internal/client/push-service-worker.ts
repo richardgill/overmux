@@ -1,5 +1,9 @@
 import { notificationLinkSchema } from "@overmux/shared";
 import { notificationEventSchema } from "../shared/protocol";
+import {
+  pushNotificationBadgePath,
+  pushNotificationIconPath,
+} from "../shared/routes";
 
 // Only the worker APIs this push-only entry uses. No fetch handler or offline shell.
 type WorkerClient = {
@@ -100,6 +104,9 @@ worker.addEventListener("push", (event) => {
   event.waitUntil(
     worker.registration.showNotification(notification.title, {
       body: notification.body,
+      // Bypass cached transparent icons after adding the light background.
+      icon: `${pushNotificationIconPath}?v=2`,
+      badge: pushNotificationBadgePath,
       data: { link: notification.open?.link },
     }),
   );
