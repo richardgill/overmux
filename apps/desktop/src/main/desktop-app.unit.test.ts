@@ -169,6 +169,50 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
+it("passes the configured input hook through page replacement and new native views", async () => {
+  const onBeforeInputEvent = vi.fn();
+  host = new DesktopApp({
+    config: desktopConfigRuntimeSchema.parse({ onBeforeInputEvent }),
+    configStore: store,
+    remoteSession: electron.session as never,
+  });
+  electron.ipcMain.removeAllListeners();
+  electron.ipcMain.handle.mockClear();
+  host.registerIpc();
+  await host.open();
+
+  const event = { preventDefault: vi.fn() };
+  const input = { type: "keyDown", key: "x" };
+  electron.BrowserWindow.instances
+    .at(-1)!
+    .webContents.emit("before-input-event", event, input);
+  expect(onBeforeInputEvent).not.toHaveBeenCalled();
+
+  await connect();
+  const first = currentContents();
+  first.emit("before-input-event", event, input);
+  await connect("https://other.test/");
+  const owner = currentContents();
+  const command = electron.ipcMain.handle.mock.calls.find(
+    ([channel]) => channel === nativeWebViewChannels.command,
+  )![1] as (event: unknown, input: unknown) => void;
+  const sender = { sender: owner, senderFrame: owner.mainFrame };
+  command(sender, { type: "create", id: crypto.randomUUID() });
+  const native = currentContents();
+  command(sender, { type: "create", id: crypto.randomUUID() });
+  const nextNative = currentContents();
+
+  [owner, native, nextNative].forEach((contents) =>
+    contents.emit("before-input-event", event, input),
+  );
+
+  expect(
+    onBeforeInputEvent.mock.calls.map(([context]) => context.webContents),
+  ).toEqual([first, owner, native, nextNative]);
+  expect(onBeforeInputEvent).toHaveBeenCalledTimes(4);
+  expect(event.preventDefault).not.toHaveBeenCalled();
+});
+
 it("uses the bundled Overmux icon for the window and macOS Dock", () => {
   const icon = resolve(import.meta.dirname, "../renderer/icon.png");
 

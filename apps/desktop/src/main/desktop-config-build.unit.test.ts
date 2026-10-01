@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type * as DesktopConfigModule from "./desktop-config";
 
@@ -51,6 +51,7 @@ describe("production desktop configuration", () => {
 export default defineOvermuxDesktopConfig({
   menuBar: "visible",
   titleBar: "native",
+  onBeforeInputEvent: ({ event }) => event.preventDefault(),
 });
 `,
     );
@@ -62,10 +63,15 @@ export default defineOvermuxDesktopConfig({
       compiledModulePath
     )) as typeof DesktopConfigModule;
 
-    await expect(loadDesktopConfig({ configPath })).resolves.toEqual({
+    const config = await loadDesktopConfig({ configPath });
+    expect(config).toEqual({
       macosTrafficLights: "hidden",
       menuBar: "visible",
       titleBar: "native",
+      onBeforeInputEvent: expect.any(Function),
     });
+    const event = { preventDefault: vi.fn() };
+    config.onBeforeInputEvent?.({ event, input: {}, webContents: {} } as never);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
   });
 });

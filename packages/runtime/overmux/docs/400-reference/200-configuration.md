@@ -255,3 +255,38 @@ export default defineOvermuxDesktopConfig({
   macosTrafficLights: "hidden",
 });
 ```
+
+### `onBeforeInputEvent`
+
+The optional `onBeforeInputEvent` callback exposes Electron's [`before-input-event`](https://www.electronjs.org/docs/latest/api/web-contents#event-before-input-event), receiving the actual Electron `Event`, `Input`, and receiving [`WebContents`](https://www.electronjs.org/docs/latest/api/web-contents).
+
+You can use this callback to intercept Electron key presses.
+
+
+```ts
+import { defineOvermuxDesktopConfig } from "@overmux/desktop";
+
+export default defineOvermuxDesktopConfig({
+  onBeforeInputEvent: ({ event, input, webContents }) => {
+    const key = input.key.toLowerCase();
+    if (
+      process.platform !== "linux" ||
+      input.type !== "keyDown" ||
+      !input.meta ||
+      input.control ||
+      input.alt ||
+      input.shift ||
+      (key !== "c" && key !== "v")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (key === "c") {
+      webContents.copy();
+    } else {
+      webContents.paste();
+    }
+  },
+});
+```

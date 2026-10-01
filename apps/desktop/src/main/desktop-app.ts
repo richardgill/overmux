@@ -71,6 +71,7 @@ export class DesktopApp {
     this.#serverUrl = serverUrl;
     this.#serverPage = new ServerPage({
       remoteSession,
+      onBeforeInputEvent: config.onBeforeInputEvent,
       getWindow: () => this.#window,
       onSelected: (selection) => this.#rememberSelection(selection),
       onIdentity: (identity) => this.#rememberIdentity(identity),

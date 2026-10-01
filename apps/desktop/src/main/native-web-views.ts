@@ -24,6 +24,8 @@ import {
   type NativeWebViewError,
   type NativeWebViewPassthroughBinding,
 } from "../shared/native-web-view.js";
+import type { DesktopBeforeInputEventHandler } from "../config/schema.js";
+import { runDesktopBeforeInputEvent } from "./desktop-input.js";
 import {
   isNativeWebUrlAllowed,
   nativeWebViewBounds,
@@ -32,6 +34,7 @@ import {
 import { isActiveRemoteMainFrame } from "./remote-notification-policy.js";
 
 type Options = {
+  onBeforeInputEvent?: DesktopBeforeInputEventHandler;
   getConfiguredUrl: () => string | undefined;
   getRemoteView: () => WebContentsView | undefined;
   getWindow: () => BrowserWindow | undefined;
@@ -292,9 +295,20 @@ export class NativeWebViews {
   };
 
   #watchPassthroughShortcuts = (entry: OwnedView) => {
-    entry.contents.on("before-input-event", (event, input) =>
-      this.#handlePassthroughInput(entry, event, input),
-    );
+    entry.contents.on("before-input-event", (event, input) => {
+      // Replayed chord input has already passed through the local hook.
+      if (!entry.passthrough.replaying) {
+        runDesktopBeforeInputEvent(this.#options.onBeforeInputEvent, {
+          event,
+          input,
+          webContents: entry.contents,
+        });
+      }
+      if (event.defaultPrevented) {
+        return;
+      }
+      this.#handlePassthroughInput(entry, event, input);
+    });
   };
 
   #matchingPassthroughBindings = (entry: OwnedView, input: Electron.Input) =>

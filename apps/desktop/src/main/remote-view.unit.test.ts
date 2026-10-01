@@ -16,6 +16,8 @@ const electronMocks = vi.hoisted(() => {
 
   class MockWebContentsView {
     webContents = {
+      copy: vi.fn(),
+      paste: vi.fn(),
       on: (event: string, handler: (...arguments_: never[]) => void) => {
         state.handlers.set(event, handler);
       },
@@ -47,13 +49,17 @@ vi.mock("electron", () => ({
   WebContentsView: electronMocks.MockWebContentsView,
 }));
 
+import type { DesktopBeforeInputEventHandler } from "../config/schema.js";
 import { createRemoteView } from "./remote-view.js";
 
-const createTestView = () => {
+const createTestView = (
+  onBeforeInputEvent?: DesktopBeforeInputEventHandler,
+) => {
   const onDeepLink = vi.fn();
   const onExternal = vi.fn();
-  createRemoteView({
+  const view = createRemoteView({
     configuredOrigin: "https://overmux.test",
+    onBeforeInputEvent,
     onDeepLink,
     onExternal,
     onLoadFailed: vi.fn(),
@@ -61,7 +67,7 @@ const createTestView = () => {
     preload: "/app/remote-notifications.cjs",
     remoteSession: { id: "remote-session" } as never,
   });
-  return { onDeepLink, onExternal };
+  return { onDeepLink, onExternal, view };
 };
 
 beforeEach(() => {
@@ -84,6 +90,61 @@ describe("remote Overmux view", () => {
         webSecurity: true,
       },
     });
+  });
+
+  it("calls the local hook synchronously with the receiving contents and actual input", () => {
+    const onBeforeInputEvent = vi.fn(({ event }) => event.preventDefault());
+    const { view } = createTestView(onBeforeInputEvent);
+    const event = { preventDefault: vi.fn() };
+    const input = { type: "keyDown", key: "c", meta: true };
+
+    electronMocks.state.handlers.get("before-input-event")?.(
+      event as never,
+      input as never,
+    );
+
+    expect(onBeforeInputEvent).toHaveBeenCalledExactlyOnceWith({
+      event,
+      input,
+      webContents: view.webContents,
+    });
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("leaves Super+C/V unchanged without a local hook", () => {
+    const { view } = createTestView();
+    const event = { preventDefault: vi.fn() };
+
+    ["c", "v"].forEach((key) =>
+      electronMocks.state.handlers.get("before-input-event")?.(
+        event as never,
+        { type: "keyDown", key, meta: true } as never,
+      ),
+    );
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(view.webContents.copy).not.toHaveBeenCalled();
+    expect(view.webContents.paste).not.toHaveBeenCalled();
+  });
+
+  it("logs hook exceptions without throwing out of input dispatch", () => {
+    const error = new Error("broken local hook");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    createTestView(() => {
+      throw error;
+    });
+
+    expect(() =>
+      electronMocks.state.handlers.get("before-input-event")?.(
+        { preventDefault: vi.fn() } as never,
+        { type: "keyDown", key: "x" } as never,
+      ),
+    ).not.toThrow();
+    expect(log).toHaveBeenCalledExactlyOnceWith(
+      "Desktop onBeforeInputEvent failed:",
+      error,
+    );
+    log.mockRestore();
   });
 
   it("denies child windows and routes only safe navigation", () => {

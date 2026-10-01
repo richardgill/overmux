@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, test as testCases, vi } from "vitest";
 
 const electron = await vi.hoisted(async () => {
   const { EventEmitter } = await import("node:events");
@@ -15,7 +15,9 @@ const electron = await vi.hoisted(async () => {
     getURL = vi.fn(() => "https://github.com/");
     getZoomFactor = () => 1;
     send = vi.fn();
-    sendInputEvent = vi.fn();
+    copy = vi.fn();
+    paste = vi.fn();
+    sendInputEvent = vi.fn((_input: unknown) => {});
     setWindowOpenHandler = vi.fn();
   }
   class WebContentsView {
@@ -48,9 +50,10 @@ const electron = await vi.hoisted(async () => {
 vi.mock("electron", () => electron);
 
 import { nativeWebViewChannels } from "../shared/native-web-view-channels.js";
+import type { DesktopBeforeInputEventHandler } from "../config/schema.js";
 import { NativeWebViews } from "./native-web-views.js";
 
-const setup = () => {
+const setup = (onBeforeInputEvent?: DesktopBeforeInputEventHandler) => {
   const owner = new electron.WebContentsView();
   const window = {
     isDestroyed: () => false,
@@ -58,6 +61,7 @@ const setup = () => {
   };
   let active = owner;
   const manager = new NativeWebViews({
+    onBeforeInputEvent,
     getConfiguredUrl: () => "https://overmux.test",
     getRemoteView: () => active as never,
     getWindow: () => window as never,
@@ -395,15 +399,73 @@ it("forwards configured input to its owner, but leaves ordinary input with the s
   test.dispose();
 });
 
+const inputHookCases = [
+  { name: "cancellation takes precedence", cancel: true },
+  { name: "uncancelled input still passes through", cancel: false },
+];
+
+testCases.each(inputHookCases)("native hook: $name", ({ cancel }) => {
+  const onBeforeInputEvent = vi.fn(({ event }) => {
+    if (cancel) {
+      event.preventDefault();
+    }
+  });
+  const test = setup(onBeforeInputEvent);
+  const view = test.create();
+  test.command({
+    type: "configure",
+    url: "https://github.com/",
+    allowedHttpOrigins: [],
+    passthroughBindings: ["Meta+C"],
+  });
+  const event = {
+    defaultPrevented: false,
+    preventDefault: vi.fn(() => {
+      event.defaultPrevented = true;
+    }),
+  };
+  const input = {
+    alt: false,
+    control: false,
+    key: "c",
+    meta: true,
+    shift: false,
+    type: "keyDown",
+  };
+
+  view.webContents.emit("before-input-event", event, input);
+
+  expect(onBeforeInputEvent).toHaveBeenCalledExactlyOnceWith({
+    event,
+    input,
+    webContents: view.webContents,
+  });
+  expect(event.preventDefault).toHaveBeenCalledOnce();
+  expect(test.owner.webContents.sendInputEvent).toHaveBeenCalledTimes(
+    cancel ? 0 : 1,
+  );
+  expect(view.webContents.copy).not.toHaveBeenCalled();
+  expect(view.webContents.paste).not.toHaveBeenCalled();
+  test.dispose();
+});
+
 it("replays incomplete native chords after a timeout or mismatch", () => {
   vi.useFakeTimers();
-  const test = setup();
+  const onBeforeInputEvent = vi.fn();
+  const test = setup(onBeforeInputEvent);
   const view = test.create();
   test.command({
     type: "configure",
     url: "https://github.com/",
     allowedHttpOrigins: [],
     passthroughBindings: [["F12", "P", "R"]],
+  });
+  // Model Electron re-entering before-input-event during internal sendInputEvent replay.
+  const replayEvents: { preventDefault: ReturnType<typeof vi.fn> }[] = [];
+  view.webContents.sendInputEvent.mockImplementation((input: unknown) => {
+    const event = { preventDefault: vi.fn() };
+    replayEvents.push(event);
+    view.webContents.emit("before-input-event", event, input);
   });
   const press = (key: string) => {
     const event = { preventDefault: vi.fn() };
@@ -456,6 +518,11 @@ it("replays incomplete native chords after a timeout or mismatch", () => {
   test.dispose();
   vi.advanceTimersByTime(1_000);
   expect(view.webContents.sendInputEvent).toHaveBeenCalledTimes(10);
+  expect(onBeforeInputEvent).toHaveBeenCalledTimes(6);
+  expect(replayEvents).toHaveLength(10);
+  replayEvents.forEach((event) =>
+    expect(event.preventDefault).not.toHaveBeenCalled(),
+  );
   vi.useRealTimers();
 });
 
