@@ -1,5 +1,15 @@
 # overmux
 
+## 0.0.11
+
+### Patch Changes
+
+- [#40](https://github.com/richardgill/overmux/pull/40) [`1a8bf22`](https://github.com/richardgill/overmux/commit/1a8bf22fb787b78a0beb8212fa33b074bfb9e9e5) Thanks [@richardgill](https://github.com/richardgill)! - Brand background notifications with the Overmux logo on a light background and a monochrome Android status-bar badge. Ship the notification images with the runtime so they remain available in development and production, including after session expiry.
+
+- [#42](https://github.com/richardgill/overmux/pull/42) [`910ca21`](https://github.com/richardgill/overmux/commit/910ca216beeedeb7326baad6625452bb691fc801) Thanks [@richardgill](https://github.com/richardgill)! - Add a synchronous `onBeforeInputEvent` desktop configuration hook for the remote Overmux view and owned native web views, with cancellation before native-view passthrough. Document the hook and Linux Super+C/V configuration in the configuration reference.
+
+- [#38](https://github.com/richardgill/overmux/pull/38) [`cfc58d8`](https://github.com/richardgill/overmux/commit/cfc58d8881fa847fc15f7a5a02c2ad5e702ebe02) Thanks [@richardgill](https://github.com/richardgill)! - Fix browser background notifications with a runtime-owned push service worker in development and production. Enable now registers an active worker with bounded failure reporting; notification clicks only navigate within the current origin.
+
 ## 0.0.10
 
 ### Patch Changes
