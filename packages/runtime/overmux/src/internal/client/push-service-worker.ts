@@ -104,7 +104,8 @@ worker.addEventListener("push", (event) => {
   event.waitUntil(
     worker.registration.showNotification(notification.title, {
       body: notification.body,
-      icon: pushNotificationIconPath,
+      // Bypass cached transparent icons after adding the light background.
+      icon: `${pushNotificationIconPath}?v=2`,
       badge: pushNotificationBadgePath,
       data: { link: notification.open?.link },
     }),
