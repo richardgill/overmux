@@ -40,8 +40,10 @@
     "productName": "Overmux",
     "artifactName": "Overmux-${version}-${arch}.${ext}",
     "directories": {
+      "buildResources": "build",
       "output": "release"
     },
+    "icon": "build/icon.png",
     "publish": null,
     "afterExtract": "./scripts/preserve-electron-licenses.ts",
     "beforePack": "./scripts/generate-dependency-notices.ts",
