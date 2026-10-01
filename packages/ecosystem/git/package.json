@@ -1,6 +1,6 @@
 {
   "name": "@overmux/git",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "license": "MIT",
   "description": "Authorized Git status and diff subscriptions with opt-in mutations for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/git",
@@ -49,7 +49,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "overmux": "^0.0.10",
+    "overmux": "^0.0.11",
     "zod": "catalog:peers"
   }
 }
