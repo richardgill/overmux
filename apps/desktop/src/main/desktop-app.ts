@@ -1,6 +1,7 @@
 // DesktopApp owns the local window, menus, dialogs, saved addresses, and link routing policy.
 // ServerPage owns the embedded website's loading, identity, and replacement lifecycle.
 import {
+  app,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -89,9 +90,13 @@ export class DesktopApp {
       "../renderer/index.html",
     );
     const chrome = getWindowChrome(this.#config);
+    const icon = join(import.meta.dirname, "../renderer/icon.png");
+    // macOS ignores BrowserWindow.icon; set the Dock icon for unpackaged launches too.
+    app.dock?.setIcon(icon);
     this.#window = new BrowserWindow({
       autoHideMenuBar: chrome.autoHideMenuBar,
       height: 800,
+      icon,
       minHeight: 480,
       minWidth: 640,
       show: false,

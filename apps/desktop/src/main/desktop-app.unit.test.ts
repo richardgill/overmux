@@ -48,8 +48,10 @@ const electron = await vi.hoisted(async () => {
   }
   class BrowserWindow extends EventEmitter {
     static instances: BrowserWindow[] = [];
-    constructor() {
+    readonly options: { icon?: string };
+    constructor(options: { icon?: string }) {
       super();
+      this.options = options;
       BrowserWindow.instances.push(this);
     }
     show = vi.fn();
@@ -74,6 +76,7 @@ const electron = await vi.hoisted(async () => {
     }
   }
   return {
+    app: { dock: { setIcon: vi.fn() } },
     BrowserWindow,
     WebContentsView,
     onLoad,
@@ -208,6 +211,13 @@ it("passes the configured input hook through page replacement and new native vie
   ).toEqual([first, owner, native, nextNative]);
   expect(onBeforeInputEvent).toHaveBeenCalledTimes(4);
   expect(event.preventDefault).not.toHaveBeenCalled();
+});
+
+it("uses the bundled Overmux icon for the window and macOS Dock", () => {
+  const icon = resolve(import.meta.dirname, "../renderer/icon.png");
+
+  expect(electron.BrowserWindow.instances[0]?.options.icon).toBe(icon);
+  expect(electron.app.dock.setIcon).toHaveBeenCalledWith(icon);
 });
 
 testCases.each(["connect", "configured", "restore"] as const)(

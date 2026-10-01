@@ -28,7 +28,7 @@ Only these application-owned files enter `app.asar`:
 dist/config/index.js
 dist/main/**/*.js
 dist/main/**/*.cjs
-dist/renderer/**/*
+dist/renderer/**/* (including icon.png)
 package.json
 LICENSE
 dist/THIRD_PARTY_NOTICES.md
@@ -40,7 +40,13 @@ Production packaging flips Electron fuses before any future signing boundary. `E
 
 ### Branding and licenses
 
-The repository has no approved source artwork suitable for generating the required platform icon sizes. Packages therefore intentionally use electron-builder's fallback Electron icon. Do not invent or upscale an icon for release. Add approved vector or high-resolution source artwork under `apps/desktop/build/` and configure it before treating desktop branding as complete. This does not block the experimental macOS preview.
+Desktop icons reuse the Overmux ring from `apps/www/public/favicon.svg`, with a light rounded tile matching the notification icon's background. `apps/desktop/build/icon.svg` is the desktop vector source; its checked-in 1024px `icon.png` is rendered from the vector, not upscaled from a smaller bitmap. Regenerate it from the repository root with:
+
+```sh
+nix shell nixpkgs#librsvg -c rsvg-convert --width 1024 --height 1024 --output apps/desktop/build/icon.png apps/desktop/build/icon.svg
+```
+
+Electron-builder uses that PNG for Linux launcher icons and converts it to the macOS bundle's ICNS icon. Vite also copies it into `dist/renderer/`, so `BrowserWindow` and the macOS Dock use the same image in both packaged and development launches. The archive verifier requires the runtime PNG to be present.
 
 Original Overmux code is MIT licensed. Desktop metadata declares `MIT`, and `app.asar` includes the Overmux license and notices for bundled application dependencies. Electron's own license and Chromium third-party notices must remain in the platform distribution; the artifact verifier checks their presence. The production `jiti` package retains its own license. Review these notices when updating bundled dependencies.
 

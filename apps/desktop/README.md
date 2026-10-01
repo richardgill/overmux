@@ -40,7 +40,7 @@ xvfb-run --auto-servernum node apps/desktop/scripts/desktop-release.ts smoke lin
 
 Upgrades are manual: replace the AppImage or install the newer Debian package. Remove the AppImage directly or run `sudo apt remove overmux-desktop` to uninstall. Automatic updates are intentionally deferred.
 
-Approved source artwork is not yet available, so these packages currently use electron-builder's fallback Electron icon. Original Overmux code is [MIT licensed](./LICENSE); packages include Overmux and third-party license notices. See the canonical [desktop distribution notes](../../notes/desktop-distribution.md) for the packaging boundary, verification, release process, and remaining branding work.
+Desktop packages, windows, and the macOS Dock use the existing Overmux ring mark on a light rounded tile. The vector source and 1024px PNG live under `build/`; electron-builder generates platform icons from that PNG. Original Overmux code is [MIT licensed](./LICENSE); packages include Overmux and third-party license notices. See the canonical [desktop distribution notes](../../notes/desktop-distribution.md) for the packaging boundary, icon regeneration, verification, and release process.
 
 ## Desktop configuration
 
