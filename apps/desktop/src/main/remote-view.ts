@@ -1,9 +1,12 @@
 import { WebContentsView, type Session } from "electron";
 
+import type { DesktopBeforeInputEventHandler } from "../config/schema.js";
+import { runDesktopBeforeInputEvent } from "./desktop-input.js";
 import { decideNavigation } from "./url-policy.js";
 
 type RemoteViewOptions = {
   configuredOrigin: string;
+  onBeforeInputEvent?: DesktopBeforeInputEventHandler;
   onDeepLink: (url: string) => void;
   onExternal: (url: string) => void;
   onLoadFailed: (description: string) => void;
@@ -43,6 +46,7 @@ const handleNavigation = (
 
 export const createRemoteView = ({
   configuredOrigin,
+  onBeforeInputEvent,
   onDeepLink,
   onExternal,
   onLoadFailed,
@@ -59,6 +63,13 @@ export const createRemoteView = ({
       session: remoteSession,
       webSecurity: true,
     },
+  });
+  view.webContents.on("before-input-event", (event, input) => {
+    runDesktopBeforeInputEvent(onBeforeInputEvent, {
+      event,
+      input,
+      webContents: view.webContents,
+    });
   });
   view.webContents.setWindowOpenHandler(({ url }) => {
     const decision = decideNavigation(url, configuredOrigin);

@@ -8,6 +8,7 @@ import {
 } from "electron";
 import { join } from "node:path";
 
+import type { DesktopBeforeInputEventHandler } from "../config/schema.js";
 import {
   navigateToOvermuxLogout,
   navigateToOvermuxSettings,
@@ -27,6 +28,7 @@ import {
 
 type PageDisplay = "immediately" | "after-load";
 type ServerPageOptions = {
+  onBeforeInputEvent?: DesktopBeforeInputEventHandler;
   remoteSession: Session;
   getWindow: () => BrowserWindow | undefined;
   // Called synchronously at selection; the caller snapshots and serializes persistence.
@@ -106,6 +108,7 @@ export class ServerPage {
       getRemoteView: () =>
         this.#active?.hasActiveDocument ? this.#active.view : undefined,
       getWindow: options.getWindow,
+      onBeforeInputEvent: options.onBeforeInputEvent,
     });
   }
 
@@ -438,6 +441,7 @@ export class ServerPage {
     const configuredOrigin = getOrigin(url);
     const view = createRemoteView({
       configuredOrigin,
+      onBeforeInputEvent: this.#options.onBeforeInputEvent,
       onDeepLink: this.#options.onDeepLink,
       onExternal: (destination) => void this.#options.onExternal(destination),
       onLoadFailed: (description) => {

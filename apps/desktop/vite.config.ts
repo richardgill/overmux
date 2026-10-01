@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [viteReact()],
   pack: [
     {
-      deps: { neverBundle: ["zod"] },
+      deps: { neverBundle: ["electron", "zod"] },
       dts: { sourcemap: false },
       entry: ["src/config/index.ts"],
       format: "esm",

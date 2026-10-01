@@ -44,7 +44,7 @@ Approved source artwork is not yet available, so these packages currently use el
 
 ## Desktop configuration
 
-Overmux loads desktop chrome settings from `$XDG_CONFIG_HOME/overmux/overmux.desktop.ts`, falling back to `~/.config/overmux/overmux.desktop.ts`. A missing file uses the current desktop defaults.
+Overmux loads desktop settings from `$XDG_CONFIG_HOME/overmux/overmux.desktop.ts`, falling back to `~/.config/overmux/overmux.desktop.ts`. A missing file uses the current desktop defaults.
 
 ```ts
 import { defineOvermuxDesktopConfig } from "@overmux/desktop";
@@ -57,7 +57,7 @@ export default defineOvermuxDesktopConfig({
 });
 ```
 
-The configuration is deliberately flat and supports only these settings:
+The configuration is deliberately flat and supports these settings:
 
 | Setting | Values | Default | Behavior |
 | --- | --- | --- | --- |
@@ -65,8 +65,47 @@ The configuration is deliberately flat and supports only these settings:
 | `menuBar` | `"visible"`, `"auto-hide"`, `"hidden"` | `"auto-hide"` | Controls the window menu on Linux and Windows. Auto-hide reveals it with `Alt`; macOS keeps its global menu. |
 | `macosTitleBarStyle` | `"native"`, `"transparent"` | unset | Overrides `titleBar` on macOS. Transparent extends content into the title-bar area. |
 | `macosTrafficLights` | `"visible"`, `"hidden"` | `"hidden"` | Controls the native macOS close, minimize, and zoom buttons together. |
+| `onBeforeInputEvent` | synchronous callback | unset | Handles input in the receiving remote or native web view before native-view passthrough. |
 
 Use `--desktop-config <path>` to load an explicit file during development or testing. The file is trusted TypeScript, loaded once at startup, and must be valid before Electron creates a window. Changes require restarting the app.
+
+### Desktop input hook
+
+The optional `onBeforeInputEvent` hook receives the actual Electron `Event`, `Input`, and receiving `WebContents`. It runs synchronously in the trusted desktop main process for the main remote Overmux view and every owned native web view, including views created later. It does not run for the local connection shell, DevTools, other applications, or OS-wide input, and does not register an Electron `globalShortcut`.
+
+Call `event.preventDefault()` synchronously to stop the receiving page's input and menu shortcuts. In native web views, the hook runs before Overmux's configured passthrough bindings (shortcuts forwarded to the owning Overmux page); `event.defaultPrevented` also stops that passthrough. The `webContents` argument is the receiving view, not necessarily the remote Overmux view. Internal replay of incomplete native-view shortcut sequences back to the native page bypasses the hook. Forwarded passthrough input is distinct from replay: if Electron emits a new input event in the remote view, the hook runs there with that remote view as receiver.
+
+Do not use an async callback or defer cancellation: returned promises are not awaited. A thrown exception is logged without crashing input dispatch; any cancellation already applied remains in effect, otherwise normal input and passthrough continue. With no hook, existing input behavior is unchanged; Linux Super+C/V is not built in. Public types `DesktopBeforeInputEventContext` and `DesktopBeforeInputEventHandler` are exported from `@overmux/desktop`.
+
+For Linux Super+C/V copy and paste in the receiving view:
+
+```ts
+import { defineOvermuxDesktopConfig } from "@overmux/desktop";
+
+export default defineOvermuxDesktopConfig({
+  onBeforeInputEvent: ({ event, input, webContents }) => {
+    const key = input.key.toLowerCase();
+    if (
+      process.platform !== "linux" ||
+      input.type !== "keyDown" ||
+      !input.meta ||
+      input.control ||
+      input.alt ||
+      input.shift ||
+      (key !== "c" && key !== "v")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (key === "c") {
+      webContents.copy();
+    } else {
+      webContents.paste();
+    }
+  },
+});
+```
 
 ## Experimental macOS preview
 
