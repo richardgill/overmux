@@ -43,6 +43,7 @@ handle: async (input, context) => {
 
 - **`invalidate(resourceId, input?)`**: tells clients to read an affected resource again after you change server-side data. See [Invalidating resources](./100-resources.md#invalidating-resources).
 - **[`notifications.send(...)`](./400-notifications.md)**: sends a notification through Overmux.
+- **[`logger`](./500-api.md#logging)**: writes structured logs with `debug`, `info`, `warn`, and `error`.
 
 See [Server API](./500-api.md#handler-context) for the full handler context.
 

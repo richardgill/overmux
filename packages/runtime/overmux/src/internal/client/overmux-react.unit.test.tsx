@@ -236,7 +236,7 @@ describe("createOvermuxHooks", () => {
     });
     const other = createClientTransport();
     const manifest = {
-      debug: false,
+      logLevel: "info" as const,
       operations: [],
       protocolVersion,
       resources: [],

@@ -239,7 +239,7 @@ export default defineOvermuxConfig({
       `import { defineOvermuxConfig, defineOvermuxServer } from "overmux";
 export default defineOvermuxConfig({
   auth: { mode: "cli-login" },
-  debug: true,
+  logLevel: "debug",
   host: "127.0.0.1",
   port: ${port},
   server: defineOvermuxServer({ resources: {} }),

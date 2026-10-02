@@ -129,9 +129,9 @@ const serverMessages = [
 describe("WebSocket protocol", () => {
   it("publishes configured operation, resource, and stream names", () => {
     const manifest = runtimeManifestSchema.parse({
-      debug: false,
+      logLevel: "info",
       operations: ["refreshWorkspace"],
-      protocolVersion: 10,
+      protocolVersion: 11,
       resources: ["workspaceState"],
       streams: ["tmuxTerminal"],
     });
@@ -204,7 +204,7 @@ describe("WebSocket protocol", () => {
   it("rejects protocol v8 registration shapes", () => {
     expect(
       runtimeManifestSchema.safeParse({
-        debug: false,
+        logLevel: "info",
         operations: [],
         protocolVersion: 8,
         resources: ["workspaceState"],
@@ -216,6 +216,18 @@ describe("WebSocket protocol", () => {
         operationId: "read-1",
         resource: "workspaceState",
         type: "resource-read",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects the previous boolean-debug manifest", () => {
+    expect(
+      runtimeManifestSchema.safeParse({
+        debug: true,
+        operations: [],
+        protocolVersion: 10,
+        resources: [],
+        streams: [],
       }).success,
     ).toBe(false);
   });

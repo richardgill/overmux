@@ -1,11 +1,11 @@
-import type { ServerConfigDefinition } from "../../public/index";
+import type { LogLevel, ServerConfigDefinition } from "../../public/index";
 import { resolve } from "node:path";
 
 import { startServerCoordinator } from "./coordinator/server-coordinator";
 
 export type OvermuxServerOptions = ServerConfigDefinition & {
   configAliases?: Record<string, string>;
-  debug?: boolean;
+  logLevel?: LogLevel;
   developmentWebTarget?: string;
   configPath: string;
 };

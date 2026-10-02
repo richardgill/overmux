@@ -50,7 +50,8 @@ export type {
 } from "./contracts";
 export { notificationLinkSchema, notificationSchema } from "./notifications";
 export type { Notification, Notifications } from "./notifications";
-export type { InstanceIdentity } from "@overmux/shared";
+export type { HandlerLogger } from "./handler-logger";
+export type { InstanceIdentity, LogLevel } from "@overmux/shared";
 export {
   createOvermuxSettingsPath,
   overmuxLogoutPath,

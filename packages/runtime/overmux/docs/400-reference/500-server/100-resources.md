@@ -96,6 +96,8 @@ subscribe: async (_input, invalidate, context) => {
 
 `context.signal` is an `AbortSignal` that Overmux aborts when the client unsubscribes, disconnects, or the server shuts down. Cancellation does not automatically stop an async function: pass the signal to APIs that support it and check it after awaiting setup. Here, `realpath` does not accept a signal, so `throwIfAborted()` prevents starting a watcher if cancellation happened during that work.
 
+Both `read` and `subscribe` receive `context.logger` for [structured logging](./500-api.md#logging), including during cleanup.
+
 Overmux calls the returned cleanup function once, even if setup finishes after cancellation. Cleanup may also be asynchronous. In this example, the signal can close the watcher before Overmux calls cleanup; `watcher.close()` is safe to call again. If setup throws before returning cleanup, your handler must release any resources it already acquired.
 
 ## Derived

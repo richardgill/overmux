@@ -48,7 +48,7 @@ describe("runtime", () => {
     );
 
     expect(runtime.manifest).toMatchObject({
-      debug: true,
+      logLevel: "info",
       operations: [],
       resources: [],
       streams: [],

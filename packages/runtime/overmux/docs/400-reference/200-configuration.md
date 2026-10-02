@@ -161,7 +161,7 @@ export default defineOvermuxConfig({
 
 See [`overmux serve`](/docs/reference/cli/serve) for development mode.
 
-### `debug`
+### `logLevel`
 
 ```ts
 import { defineOvermuxConfig } from "overmux";
@@ -169,11 +169,26 @@ import { defineOvermuxConfig } from "overmux";
 export default defineOvermuxConfig({
   // ...other config
 
-  // Default: true.
-  // Enable debug logging.
-  debug: true,
+  // Default: "info", in development and production.
+  // Options: "debug", "info", "warn", "error".
+  logLevel: "info",
 });
 ```
+
+`logLevel` sets the minimum severity for runtime and [structured handler logs](./500-server/500-api.md#logging):
+
+| Level | Written events |
+| --- | --- |
+| `"debug"` | debug, info, warn, error |
+| `"info"` (default) | info, warn, error |
+| `"warn"` | warn, error |
+| `"error"` | error |
+
+Server startup/shutdown are info events; routine HTTP requests, WebSocket connections, and operation start/completion are debug events. Lifecycle events do not bypass the threshold. Logs go to the server JSONL file and stderr; existing stdout/stderr journal capture is unchanged.
+
+Browser console forwarding is enabled only at `"debug"`, not at the other levels, even for browser console errors. Treat this as diagnostic capture that may contain application data.
+
+This replaces the removed `debug` boolean. Use `logLevel: "debug"` for investigation, or omit the option for normal `"info"` logging. Configuration using `debug` is rejected.
 
 See [Storage locations](/docs/reference/storage-locations) for the server log location.
 

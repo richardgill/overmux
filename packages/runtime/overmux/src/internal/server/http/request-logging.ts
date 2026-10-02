@@ -28,7 +28,7 @@ export const createRequestLoggingMiddleware =
       },
       durationMs: Date.now() - startedAt,
       event: failed ? "http-request-failure" : "http-request",
-      level: failed ? "error" : undefined,
+      level: failed ? "error" : "debug",
       message: context.error?.message,
     });
   };

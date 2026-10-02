@@ -62,7 +62,7 @@ const createApp = async (
   });
   const runtime = {
     getOperation: vi.fn(),
-    manifest: { debug: false, operations: [], resources: [], streams: [] },
+    manifest: { logLevel: "info", operations: [], resources: [], streams: [] },
   };
   const app = createHttpApp({
     auth: authBoundary,

@@ -12,7 +12,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -85,7 +84,6 @@ const OvermuxRuntime = ({
   const safeMode = new URLSearchParams(location.search).get("safe") === "1";
   const transport = useMemo(createClientTransport, []);
   const queryClient = useMemo(() => new QueryClient(), []);
-  const logForwardingDisposer = useRef<(() => void) | undefined>(undefined);
   const [manifest, setManifest] = useState<RuntimeManifest>();
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -114,12 +112,11 @@ const OvermuxRuntime = ({
   const registrations = useMemo(() => new Set<RegisteredCommand>(), []);
   const [registrationRevision, setRegistrationRevision] = useState(0);
   useEffect(() => {
-    if (manifest?.debug && !logForwardingDisposer.current) {
-      logForwardingDisposer.current = installBrowserLogForwarding(
-        transport.reportDiagnostic,
-      );
+    if (manifest?.logLevel !== "debug") {
+      return;
     }
-  }, [manifest?.debug, transport]);
+    return installBrowserLogForwarding(transport.reportDiagnostic);
+  }, [manifest?.logLevel, transport]);
   useEffect(
     () =>
       transport.subscribeStatus((status) => {
@@ -131,7 +128,6 @@ const OvermuxRuntime = ({
   );
   useEffect(
     () => () => {
-      logForwardingDisposer.current?.();
       transport.dispose();
     },
     [transport],

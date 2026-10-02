@@ -8,7 +8,12 @@ import type {
 import type { Notifications } from "../../../public/index";
 import { z } from "zod";
 
-import type { RuntimeHandlerContext } from "./runtime-resources";
+import type { RuntimeResources } from "./runtime-resources";
+import type { ServerLogger } from "../server-logger";
+import {
+  createHandlerLogger,
+  type HandlerLogCorrelation,
+} from "./handler-logger";
 
 export class OperationValidationError extends Error {
   constructor(
@@ -20,7 +25,11 @@ export class OperationValidationError extends Error {
 }
 
 export type RuntimeOperation = {
-  execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
+  execute: (
+    input: unknown,
+    signal?: AbortSignal,
+    correlation?: HandlerLogCorrelation,
+  ) => Promise<unknown>;
   returnsVoid: boolean;
 };
 
@@ -40,7 +49,8 @@ export type RuntimeOperationDefinitions = Readonly<
 >;
 
 type CreateRuntimeOperationsOptions = {
-  context: (signal?: AbortSignal) => RuntimeHandlerContext;
+  context: RuntimeResources["context"];
+  serverLogger?: ServerLogger;
   definitions: RuntimeOperationDefinitions;
   notifications: Notifications;
 };
@@ -49,6 +59,7 @@ export const createRuntimeOperations = ({
   context,
   definitions,
   notifications,
+  serverLogger,
 }: CreateRuntimeOperationsOptions): RuntimeOperations => {
   const operations = new Map<string, RuntimeOperation>();
   Object.entries(definitions).forEach(([name, definition]) => {
@@ -56,7 +67,7 @@ export const createRuntimeOperations = ({
       throw new Error("Operation names must not be empty");
     }
     operations.set(name, {
-      execute: async (rawInput, signal) => {
+      execute: async (rawInput, signal, correlation) => {
         const operationContext = context(signal);
         operationContext.signal.throwIfAborted();
         const input = definition.input.safeParse(rawInput);
@@ -65,6 +76,13 @@ export const createRuntimeOperations = ({
         }
         const rawOutput = await definition.handle(input.data, {
           ...operationContext,
+          logger: createHandlerLogger({
+            serverLogger,
+            correlation,
+            capabilityKind: "operation",
+            registeredName: name,
+            handler: "handle",
+          }),
           notifications,
         });
         operationContext.signal.throwIfAborted();

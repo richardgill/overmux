@@ -17,6 +17,12 @@ vi.mock("./session", async (importOriginal) => ({
 import { zellijTerminalStream } from "./stream";
 
 const context = () => ({
+  logger: {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  },
   instance: {
     getInstanceId: () => "test",
     getDeepLinkPrefix: () => "overmux://test",

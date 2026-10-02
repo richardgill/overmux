@@ -2,11 +2,12 @@
 // Application traffic never crosses this process boundary.
 
 import { z } from "zod";
+import { logLevelSchema } from "@overmux/shared";
 
 const childOptionsSchema = z.object({
   configAliases: z.record(z.string(), z.string()).optional(),
   configPath: z.string(),
-  debug: z.boolean().optional(),
+  logLevel: logLevelSchema.optional(),
   developmentWebTarget: z.url().optional(),
   host: z.string().optional(),
   port: z.number().int().min(0).max(65_535).optional(),
