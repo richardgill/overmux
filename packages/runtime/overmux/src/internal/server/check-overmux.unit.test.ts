@@ -74,10 +74,44 @@ export default defineOvermuxServer({ resources: { count: { kind: "query" } as an
 
     expect(result).toMatchObject({ ok: false });
     expect(result.diagnostics[0]).toMatchObject({
-      path: "server.resources.count.contract",
       phase: "runtime",
     });
     expect(result.diagnostics[0]?.message).not.toContain("\n    at ");
+  });
+
+  test("checks missing server imports", async () => {
+    const configPath = await createProject({
+      config: `import { defineOvermuxConfig } from "overmux";
+export default defineOvermuxConfig({ auth: { mode: "cli-login" }, server: (await import("./missing.ts")).default });`,
+      server: "export default { resources: {} };",
+    });
+    const result = await checkOvermux({ configPath });
+    expect(result.ok).toBe(false);
+    expect(
+      result.diagnostics.some(({ message }) => message.includes("missing.ts")),
+    ).toBe(true);
+  });
+
+  test("follows server value imports regardless of filename", async () => {
+    const configPath = await createProject({
+      config: `import { defineOvermuxConfig } from "overmux";
+import server from "./plain";
+export default defineOvermuxConfig({ auth: { mode: "cli-login" }, server });`,
+      server: "export default { resources: {} };",
+    });
+    await writeFile(
+      join(dirname(configPath), "plain.ts"),
+      'import { createOvermuxHooks } from "overmux/client"; export default { resources: {} };',
+    );
+    const result = await checkOvermux({ configPath });
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "OVERMUX_IMPORT_BOUNDARY",
+          phase: "imports",
+        }),
+      ]),
+    );
   });
 
   test("rejects server imports from reachable shared modules", async () => {

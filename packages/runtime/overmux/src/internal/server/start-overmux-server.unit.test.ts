@@ -1,7 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, request as requestHttp } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -14,7 +13,9 @@ const servers: OvermuxServer[] = [];
 const directories: string[] = [];
 
 const createDirectory = async (name: string) => {
-  const directory = await mkdtemp(join(tmpdir(), name));
+  const root = join(process.cwd(), ".test-tmp");
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, name));
   directories.push(directory);
   return directory;
 };

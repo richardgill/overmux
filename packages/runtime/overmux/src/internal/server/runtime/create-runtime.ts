@@ -29,7 +29,9 @@ import {
 
 export type Runtime = {
   instance: InstanceContext;
-  establishInstance: (port: number) => InstanceIdentity;
+  establishInstance: (
+    port: number,
+  ) => InstanceIdentity | Promise<InstanceIdentity>;
   manifest: RuntimeManifest;
   dispose: () => Promise<void>;
   getOperation: (name: string) => RuntimeOperation | undefined;
@@ -69,7 +71,7 @@ export const createRuntime = async ({
       notifications,
     });
     const streams = createRuntimeStreams({
-      context,
+      instance: instance.context,
       definitions: (config.server.streams ?? {}) as RuntimeStreamDefinitions,
       lifecycle,
     });

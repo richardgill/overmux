@@ -24,6 +24,8 @@ export type HandlerContext<TInputs extends ResourceInputMap = {}> = {
   signal: AbortSignal;
 };
 
+export type StreamContext = Pick<HandlerContext, "instance" | "signal">;
+
 export type OperationContext<TInputs extends ResourceInputMap = {}> =
   HandlerContext<TInputs> & {
     notifications: Notifications;
@@ -127,12 +129,11 @@ export type StreamHandlerDefinition<
   TInput extends z.ZodType = z.ZodType,
   TClientMessage extends z.ZodType = z.ZodType,
   TServerMessage extends z.ZodType = z.ZodType,
-  TContext = HandlerContext,
 > = {
   contract: StreamContract<TInput, TClientMessage, TServerMessage>;
   open: (
     input: z.output<TInput>,
-    context: TContext & {
+    context: StreamContext & {
       emit: (message: z.input<NoInfer<TServerMessage>>) => void;
       fail: (cause: unknown) => void;
     },
@@ -145,21 +146,10 @@ export const defineStreamHandler = <
   TInput extends z.ZodType,
   TClientMessage extends z.ZodType,
   TServerMessage extends z.ZodType,
-  TContext = HandlerContext,
 >(
   contract: StreamContract<TInput, TClientMessage, TServerMessage>,
-  open: StreamHandlerDefinition<
-    TInput,
-    TClientMessage,
-    TServerMessage,
-    TContext
-  >["open"],
-): StreamHandlerDefinition<
-  TInput,
-  TClientMessage,
-  TServerMessage,
-  TContext
-> => ({
+  open: StreamHandlerDefinition<TInput, TClientMessage, TServerMessage>["open"],
+): StreamHandlerDefinition<TInput, TClientMessage, TServerMessage> => ({
   contract,
   open,
 });
@@ -273,11 +263,8 @@ export type ServerConfigDefinition = {
   watch?: boolean;
 };
 
-type StreamDefinitions<TContext = HandlerContext<ResourceInputMap>> = Readonly<
-  Record<
-    string,
-    StreamHandlerDefinition<AnyZodType, AnyZodType, AnyZodType, TContext>
-  >
+type StreamDefinitions = Readonly<
+  Record<string, StreamHandlerDefinition<AnyZodType, AnyZodType, AnyZodType>>
 >;
 
 type OperationDefinitions = Readonly<
@@ -403,8 +390,7 @@ export const defineOvermuxServer = <
 >(definition: {
   operations?: ConfiguredOperations<TInputs, TOutputs, NoInfer<TContracts>>;
   resources: ConfiguredResources<TContracts, TDependencies>;
-  streams?: TStreams &
-    StreamDefinitions<HandlerContext<ResourceInputs<NoInfer<TContracts>>>>;
+  streams?: TStreams & StreamDefinitions;
 }): ConfigDefinition<
   ConfiguredResources<TContracts, TDependencies>,
   TStreams,

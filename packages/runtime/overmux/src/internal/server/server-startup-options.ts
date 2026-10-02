@@ -1,6 +1,6 @@
 import {
   serverConfigRuntimeSchema,
-  type RuntimeConfigDefinition,
+  type RuntimeConfigSettings,
 } from "@overmux/shared/node";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
@@ -28,7 +28,7 @@ export const resolveServerStartupOptions = ({
   configPath,
   overrides = {},
 }: {
-  config: RuntimeConfigDefinition;
+  config: RuntimeConfigSettings;
   configPath: string;
   overrides?: ServerConfigDefinition & { debug?: boolean };
 }): ResolvedServerStartupOptions => {

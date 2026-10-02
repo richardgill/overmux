@@ -5,7 +5,7 @@ import {
   type SubscriptionResourceDefinition,
 } from "overmux";
 
-import { tmuxStateSchema, type TmuxState } from "../shared/state-contract";
+import { tmuxStateSchema } from "../shared/state-contract";
 import type { TmuxBackend } from "./backend";
 
 export type TmuxStateResource = SubscriptionResourceDefinition<
@@ -18,28 +18,13 @@ export const tmuxResource = ({
 }: {
   backend: TmuxBackend;
 }): TmuxStateResource => {
-  let initialization: Promise<TmuxState> | undefined;
-  let initialized = false;
   const subscribers = new Set<() => void>();
   let unsubscribeBackend: (() => void) | undefined;
 
-  const read = (_input: void, context: HandlerContext) => {
-    if (initialized) {
-      return backend.state();
-    }
-    if (!initialization) {
-      initialization = backend.refresh(context.signal).then((state) => {
-        initialized = true;
-        return state;
-      });
-      void initialization
-        .finally(() => {
-          initialization = undefined;
-        })
-        .catch(() => undefined);
-    }
-    return initialization;
-  };
+  // The stream has its own backend, and tmux may also change without any UI subscriber.
+  // Refresh explicit reads rather than trusting an unobserved worker-local cache.
+  const read = (_input: void, context: HandlerContext) =>
+    backend.refresh(context.signal);
   return {
     contract: defineResourceContract({
       input: noInputSchema,

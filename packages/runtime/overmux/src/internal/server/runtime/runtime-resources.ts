@@ -6,10 +6,10 @@ import {
   type RuntimeDisposer,
 } from "../../../public/index";
 import { isDeepStrictEqual } from "node:util";
-
 import {
   createResourceDependencyGraph,
   getInvalidatedResourceIds,
+  type ResourceDependencyGraph,
 } from "./resource-dependency-graph";
 import type { RuntimeLifecycle } from "./runtime-lifecycle";
 
@@ -19,6 +19,7 @@ export type RuntimeResource = {
     input: unknown,
     listener: () => void,
     signal?: AbortSignal,
+    onError?: (cause: unknown) => void,
   ) => Promise<RuntimeDisposer>;
 };
 
@@ -36,7 +37,7 @@ export type RuntimeResources = {
 };
 
 type InvalidationListener = {
-  input: unknown;
+  inputs: ReadonlyMap<string, unknown>;
   listener: () => void;
   resourceId: string;
 };
@@ -45,6 +46,25 @@ type CreateRuntimeResourcesOptions = {
   definitions: RuntimeResourceDefinitions;
   instance: HandlerContext["instance"];
   lifecycle: RuntimeLifecycle;
+};
+
+const parseDependencyInputs = (
+  definitions: RuntimeResourceDefinitions,
+  graph: ResourceDependencyGraph,
+  id: string,
+  rawInput: unknown,
+  inputs = new Map<string, unknown>(),
+): ReadonlyMap<string, unknown> => {
+  if (inputs.has(id)) {
+    return inputs;
+  }
+  // Each contract receives the original input, not another contract's transformed
+  // output. Retain each dependency's parsed key for matching invalidations.
+  inputs.set(id, definitions[id]!.contract.input.parse(rawInput));
+  graph.dependencies.get(id)?.forEach((dependencyId) => {
+    parseDependencyInputs(definitions, graph, dependencyId, rawInput, inputs);
+  });
+  return inputs;
 };
 
 const createSubscriptionLifetime = ({
@@ -73,23 +93,23 @@ const createSubscriptionLifetime = ({
     },
   };
   const disposers: RuntimeDisposer[] = [];
+  const subscription = {
+    disposers,
+    dispose: () => {
+      controller.abort(new Error("Resource subscription closed"));
+      return release();
+    },
+    refresh: registeredEntry.listener,
+    signal: subscriptionSignal,
+  };
   // Own the lifetime before invoking userland, which can invalidate and
   // trigger unsubscribe synchronously, or await setup past cancellation.
   const release = lifecycle.track(async () => {
     invalidationListeners.delete(registeredEntry);
     await lifecycle.disposeAll(disposers);
   }, subscriptionSignal);
-  const dispose = () => {
-    controller.abort(new Error("Resource subscription closed"));
-    return release();
-  };
   invalidationListeners.add(registeredEntry);
-  return {
-    dispose,
-    disposers,
-    refresh: registeredEntry.listener,
-    signal: subscriptionSignal,
-  };
+  return subscription;
 };
 
 export const createRuntimeResources = ({
@@ -113,7 +133,7 @@ export const createRuntimeResources = ({
     invalidationListeners.forEach((entry) => {
       if (
         ids.has(entry.resourceId) &&
-        (allInputs || isDeepStrictEqual(entry.input, input))
+        (allInputs || isDeepStrictEqual(entry.inputs.get(id), input))
       ) {
         entry.listener();
       }
@@ -121,7 +141,7 @@ export const createRuntimeResources = ({
   };
 
   const invalidate = (resourceId: string, input?: unknown) => {
-    if (!resources.has(resourceId)) {
+    if (!Object.hasOwn(definitions, resourceId)) {
       throw new Error(`Unknown resource ID: ${resourceId}`);
     }
     const definition = definitions[resourceId]!;
@@ -136,103 +156,111 @@ export const createRuntimeResources = ({
     signal: lifecycle.requestSignal(signal),
   });
 
-  const read = async (
+  const read = (
     id: string,
     rawInput: unknown,
     signal?: AbortSignal,
+    reads = new Map<string, Promise<unknown>>(),
   ): Promise<unknown> => {
+    const existing = reads.get(id);
+    if (existing) {
+      return existing;
+    }
+    const pending = readDefinition(id, rawInput, signal, reads);
+    reads.set(id, pending);
+    return pending;
+  };
+
+  const readDefinition = async (
+    id: string,
+    rawInput: unknown,
+    signal: AbortSignal | undefined,
+    reads: Map<string, Promise<unknown>>,
+  ) => {
     const definition = definitions[id]!;
-    const operationSignal = lifecycle.requestSignal(signal);
-    operationSignal.throwIfAborted();
+    const handlerContext = context(signal);
+    handlerContext.signal.throwIfAborted();
     const input = definition.contract.input.parse(rawInput);
-    const rawOutput =
+    const dependencies =
       definition.kind === "derived"
-        ? definition.combine(
-            Object.fromEntries(
-              await Promise.all(
-                Object.entries(
-                  definition.dependencies as Readonly<Record<string, string>>,
-                ).map(async ([name, dependencyId]) => [
-                  name,
-                  await read(dependencyId, rawInput, signal),
-                ]),
-              ),
+        ? Object.fromEntries(
+            await Promise.all(
+              Object.entries(
+                definition.dependencies as Readonly<Record<string, string>>,
+              ).map(async ([name, dependencyId]) => [
+                name,
+                await read(
+                  dependencyId,
+                  rawInput,
+                  handlerContext.signal,
+                  reads,
+                ),
+              ]),
             ),
           )
-        : await definition.read(input, context(signal));
-    operationSignal.throwIfAborted();
-    return definition.contract.output.parse(rawOutput);
+        : undefined;
+    // Dependency reads may finish after cancellation; never call combine then.
+    handlerContext.signal.throwIfAborted();
+    const output =
+      definition.kind === "derived"
+        ? definition.combine(dependencies)
+        : await definition.read(input, handlerContext);
+    handlerContext.signal.throwIfAborted();
+    return definition.contract.output.parse(output);
   };
 
   const activateSubscriptions = async (
-    id: string,
-    rawInput: unknown,
-    signal: AbortSignal,
-    activated: Set<string>,
-    disposers: RuntimeDisposer[],
-  ): Promise<void> => {
-    signal.throwIfAborted();
-    if (activated.has(id)) {
-      return;
-    }
-    activated.add(id);
-    const definition = definitions[id]!;
-    const input = definition.contract.input.parse(rawInput);
-    if (definition.kind === "subscription") {
-      const dispose = await definition.subscribe(
-        input,
-        () => {
-          if (!signal.aborted) {
-            invalidateResource(id, input);
-          }
-        },
-        context(signal),
-      );
-      if (typeof dispose !== "function") {
-        throw new Error(`Resource ${id} subscribe must return a disposer`);
-      }
-      // Cancellation releases acquired resources without waiting for pending
-      // userland setup. A cleanup returned after cancellation is released here.
-      if (signal.aborted) {
-        await dispose();
-        signal.throwIfAborted();
-      }
-      disposers.push(dispose);
-      return;
-    }
-    if (definition.kind === "derived") {
-      for (const dependencyId of graph.dependencies.get(id) ?? []) {
-        await activateSubscriptions(
-          dependencyId,
-          rawInput,
-          signal,
-          activated,
-          disposers,
+    inputs: ReadonlyMap<string, unknown>,
+    subscription: ReturnType<typeof createSubscriptionLifetime>,
+  ) => {
+    // Inputs are collected in dependency order and deduplicated before userland
+    // runs, so synchronous invalidation can already match every reachable key.
+    for (const [id, input] of inputs) {
+      subscription.signal.throwIfAborted();
+      const definition = definitions[id]!;
+      if (definition.kind === "subscription") {
+        const dispose = await definition.subscribe(
+          input,
+          () => {
+            if (!subscription.signal.aborted) {
+              invalidateResource(id, input);
+            }
+          },
+          context(subscription.signal),
         );
+        if (typeof dispose !== "function") {
+          throw new Error(`Resource ${id} subscribe must return a disposer`);
+        }
+        // Cancellation releases acquired resources without waiting for pending
+        // userland setup. A cleanup returned after cancellation is released here.
+        if (subscription.signal.aborted) {
+          await dispose();
+          subscription.signal.throwIfAborted();
+        }
+        subscription.disposers.push(dispose);
       }
     }
   };
 
   Object.keys(definitions).forEach((name) => {
     resources.set(name, {
-      read: (input, signal) => read(name, input, signal),
+      read: (rawInput, signal) => read(name, rawInput, signal),
       subscribe: async (rawInput, listener, signal) => {
         lifecycle.requestSignal(signal).throwIfAborted();
-        const input = definitions[name]!.contract.input.parse(rawInput);
+        const inputs = parseDependencyInputs(
+          definitions,
+          graph,
+          name,
+          rawInput,
+        );
         const subscription = createSubscriptionLifetime({
-          entry: { input, listener, resourceId: name },
+          entry: { inputs, listener, resourceId: name },
           invalidationListeners,
           lifecycle,
           signal,
         });
         try {
-          await activateSubscriptions(
-            name,
-            rawInput,
-            subscription.signal,
-            new Set(),
-            subscription.disposers,
-          );
+          await activateSubscriptions(inputs, subscription);
           subscription.signal.throwIfAborted();
           // Refresh only this subscriber to cover changes during setup. Returning
           // cleanup does not imply an external event source is already ready.

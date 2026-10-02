@@ -127,16 +127,18 @@ const createConfig = () =>
       },
     },
     streams: {
-      events: defineStreamHandler(eventsContract, (_input, { emit }) => {
-        emit({ value: "ready" });
+      events: defineStreamHandler(eventsContract, (_input, context) => {
+        expectTypeOf(context).not.toHaveProperty("invalidate");
+        context.emit({ value: "ready" });
         return { onMessage: ({ acknowledged }) => void acknowledged };
       }),
-      invalidate: {
+      inspect: {
         contract: eventsContract,
         open: (_input, context) => {
-          context.invalidate("count");
-          // @ts-expect-error plain streams also use registered resource IDs
-          context.invalidate("missing");
+          expectTypeOf(context).not.toHaveProperty("invalidate");
+          expectTypeOf(context.signal).toEqualTypeOf<AbortSignal>();
+          // @ts-expect-error streams cannot invalidate resources
+          context.invalidate;
           return {};
         },
       },
@@ -337,7 +339,7 @@ describe("object-keyed configuration", () => {
       "count" | "label" | "lookup" | "watched" | "workspace"
     >();
     expectTypeOf<keyof Operations>().toEqualTypeOf<"refresh">();
-    expectTypeOf<keyof Streams>().toEqualTypeOf<"events" | "invalidate">();
+    expectTypeOf<keyof Streams>().toEqualTypeOf<"events" | "inspect">();
     expectTypeOf<Resources["lookup"]["contract"]>().toEqualTypeOf<
       typeof lookupContract
     >();

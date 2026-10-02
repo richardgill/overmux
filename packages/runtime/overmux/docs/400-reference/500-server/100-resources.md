@@ -105,6 +105,9 @@ Derived resources compute a value from other resources.
 For example, count the entries returned by the `ls` resource above. Add `entryCount` alongside `ls` in your `resources` object:
 
 ```ts
+import { defineOvermuxServer, defineResourceContract, noInputSchema } from "overmux";
+import { z } from "zod";
+
 defineOvermuxServer({
   resources: {
     ls: {
@@ -124,11 +127,13 @@ defineOvermuxServer({
 });
 ```
 
-`dependencies` maps the names used in `combine` to resource IDs. Here, `combine` receives the value of `ls` and returns its length.
+`dependencies` maps the names used in `combine` to sibling resource IDs. Here, `combine` receives the inferred output of `ls` and returns its length. If `ls` returns `["bin", "etc", "home"]`, `entryCount` returns `3`.
 
-If `ls` returns `["bin", "etc", "home"]`, `entryCount` returns `3`. With the subscription version of `ls`, the count updates when the directory listing changes.
+Each dependency receives the same raw input, parsed by its own contract. Dependency IDs must exist, names and IDs must be nonempty, and dependencies must not form cycles.
 
-Access it from your UI with `useResource({ id: "entryCount" })`.
+Subscribing to a derived resource activates its reachable subscription dependencies. Shared dependencies are activated once per derived subscription, even when reached through multiple paths. Invalidation propagates through all transitive dependants; input-specific invalidation matches the changed dependency's parsed input. Ending the subscription releases its dependency subscriptions, including cleanup returned after cancellation.
+
+Access the result from your UI with `useResource({ id: "entryCount" })`.
 
 ## Accessing resources from your Overmux UI
 

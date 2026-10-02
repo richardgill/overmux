@@ -271,11 +271,10 @@ const paneFormat = [
 export const defineTmuxControlBackend = (
   rawOptions: TmuxControlBackendOptions = {},
 ): TmuxBackend => {
-  const { controlClientFactory, ...schemaInput } = rawOptions;
+  const { controlClientFactory = createTmuxControlClient, ...schemaInput } =
+    rawOptions;
   const options = optionsSchema.parse(schemaInput);
-  const client = (controlClientFactory ?? createTmuxControlClient)({
-    socket: options.socket,
-  });
+  const client = controlClientFactory({ socket: options.socket });
   const state: StateTracking = {
     current: emptyState(options.id),
     versionError: undefined,
@@ -306,6 +305,9 @@ export const defineTmuxControlBackend = (
     }
     client.subscribe((event) => {
       notifications.listeners.forEach((listener) => listener(event));
+      if (!state.listeners.size) {
+        return;
+      }
       if (notifications.refreshTimer) {
         clearTimeout(notifications.refreshTimer);
       }

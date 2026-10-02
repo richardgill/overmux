@@ -23,7 +23,6 @@ const context = () => ({
   },
   emit: vi.fn(),
   fail: vi.fn(),
-  invalidate: vi.fn(),
   signal: new AbortController().signal,
 });
 

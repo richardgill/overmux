@@ -209,7 +209,6 @@ describe("Pi server plugin", () => {
         instance,
         emit,
         fail: vi.fn(),
-        invalidate: vi.fn(),
         signal: new AbortController().signal,
       },
     );
@@ -300,7 +299,6 @@ describe("Pi server plugin", () => {
           instance,
           emit: vi.fn(),
           fail: vi.fn(),
-          invalidate: vi.fn(),
           signal: new AbortController().signal,
         },
       ),
@@ -351,7 +349,7 @@ describe("Pi server plugin", () => {
     const [stream, operation] = await Promise.all([
       piConversationStream({ agents }).open(
         { agentId: sessionId },
-        { ...context, emit },
+        { instance, signal: context.signal, fail: context.fail, emit },
       ),
       piOperationHandlers({ agents }).sendPiMessage.handle(
         { agentId: sessionId, deliverAs: "steer", message: "Review this" },
@@ -395,7 +393,6 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
-        invalidate: vi.fn(),
         signal: controller.signal,
       },
     );
@@ -445,7 +442,6 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
-        invalidate: vi.fn(),
         signal: new AbortController().signal,
       },
     );
@@ -499,7 +495,6 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
-        invalidate: vi.fn(),
         signal: new AbortController().signal,
       },
     );
@@ -590,7 +585,6 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
-        invalidate: vi.fn(),
         signal: new AbortController().signal,
       },
     );

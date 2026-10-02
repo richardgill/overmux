@@ -25,6 +25,10 @@ export default defineOvermuxConfig({
 });
 ```
 
+Resources and operations share one worker thread and module state. Each named stream runs in a separate worker, shared by all sessions of that stream. Streams do not share JavaScript state with resources, operations, or other named streams. This keeps synchronous resource and operation work from blocking stream handlers or the HTTP/WebSocket event loop, but workers still compete for CPU and memory.
+
+Overmux evaluates your configuration separately in each worker and during configuration inspection. Keep top-level initialization repeatable: start watchers and sessions inside handlers and release them through cleanup functions. Backends using the same external service, such as a tmux socket, still share that service but use separate JavaScript objects and connections.
+
 See [Server](/docs/reference/server).
 
 ### `auth`

@@ -129,11 +129,15 @@ Overmux calls `dispose` once when the session closes. Use it to stop timers, rem
 
 `useStream` closes its session when the component unmounts. You can also close it explicitly with `close()`.
 
-The handler context provides an abort `signal` for cancelling background work and `fail(cause)` for failing and closing the session. See [Server API: Stream handlers](./500-api.md#stream-handlers).
+The stream context provides an abort `signal` for cancelling background work and `fail(cause)` for failing and closing the session. See [Server API: Stream handlers](./500-api.md#stream-handlers).
 
 ## How streams work
 
 Streams communicate over a persistent WebSocket connection between your browser and server.
+
+Each named stream runs in its own worker. Resources, including derived resources, and operations share a separate application worker; module-local state is not shared with streams. See [Configuration](../200-configuration.md#server).
+
+Streams cannot invalidate resources. To mutate data and invalidate affected resources, have the client call an [operation](./200-operations.md). To refresh resources when an external source changes, use a [subscription resource watcher](./100-resources.md#subscription). A stream does not automatically invoke an operation.
 
 Overmux validates the opening input and messages against the stream contract. Client messages are passed to `onMessage` in order; calls to `emit` send messages to that session's client.
 

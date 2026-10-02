@@ -12,16 +12,10 @@ import {
   type RuntimeStreamDefinitions,
 } from "./runtime-streams";
 
-const createContext =
-  (lifecycle: ReturnType<typeof createRuntimeLifecycle>) =>
-  (signal?: AbortSignal) => ({
-    instance: {
-      getInstanceId: () => "test",
-      getDeepLinkPrefix: () => "overmux://test",
-    },
-    invalidate: vi.fn(),
-    signal: lifecycle.requestSignal(signal),
-  });
+const instance = {
+  getInstanceId: () => "test",
+  getDeepLinkPrefix: () => "overmux://test",
+};
 
 const streamById = (
   streams: ReturnType<typeof createRuntimeStreams>,
@@ -39,7 +33,7 @@ describe("runtime streams", () => {
       serverMessage: z.string(),
     });
     const streams = createRuntimeStreams({
-      context: createContext(lifecycle),
+      instance,
       definitions: {
         events: defineStreamHandler(contract, () => ({
           dispose,
@@ -79,7 +73,7 @@ describe("runtime streams", () => {
       serverMessage: z.string(),
     });
     const streams = createRuntimeStreams({
-      context: createContext(lifecycle),
+      instance,
       definitions: {
         malformed: defineStreamHandler(contract, (_input, { emit }) => {
           emit(3 as unknown as string);

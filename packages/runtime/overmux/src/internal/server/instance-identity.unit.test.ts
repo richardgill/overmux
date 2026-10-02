@@ -27,24 +27,37 @@ const start = async (instanceId?: string) => {
   const configPath = join(directory, "overmux.config.ts");
   await writeFile(
     configPath,
-    `
-import { z } from "zod";
+    `import { writeFileSync } from "node:fs";
+import server from "./identity.server";
 let calls = 0;
+const configured = ${instanceId ?? "undefined"};
+export default {
+  auth: { mode: "cli-login" }, host: "127.0.0.1", watch: false,
+  instanceId: typeof configured === "function" ? (context) => {
+    const value = configured(context);
+    writeFileSync(${JSON.stringify(join(directory, "calls"))}, String(calls));
+    return value;
+  } : configured,
+  server,
+};`,
+  );
+  await writeFile(
+    join(directory, "identity.server.ts"),
+    `
+import { readFileSync, existsSync } from "node:fs";
+import { z } from "zod";
 const identity = (_input, { instance }) => ({
-  instanceId: instance.getInstanceId(), deepLinkPrefix: instance.getDeepLinkPrefix(), calls,
+  instanceId: instance.getInstanceId(), deepLinkPrefix: instance.getDeepLinkPrefix(),
+  calls: existsSync(${JSON.stringify(join(directory, "calls"))}) ? Number(readFileSync(${JSON.stringify(join(directory, "calls"))}, "utf8")) : 0,
 });
 const contract = { input: z.void(), output: z.object({ instanceId: z.string(), deepLinkPrefix: z.string(), calls: z.number() }) };
 export default {
-  auth: { mode: "cli-login" }, host: "127.0.0.1", watch: false,
-  ${instanceId === undefined ? "" : `instanceId: ${instanceId},`}
-  server: {
     resources: { identity: { contract, kind: "query", read: identity } },
     operations: { identity: { ...contract, handle: identity } },
     streams: { identity: {
       contract: { input: z.void(), clientMessage: z.never(), serverMessage: contract.output },
       open: (_input, context) => { context.emit(identity(undefined, context)); return {}; },
     } },
-  },
 };
 `,
   );

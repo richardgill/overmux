@@ -13,7 +13,8 @@
     "overmux": "./dist/bin.js"
   },
   "imports": {
-    "#server-child": "./dist/internal/server/coordinator/server-child.js"
+    "#server-child": "./dist/internal/server/coordinator/server-child.js",
+    "#worker-entry": "./dist/internal/server/worker-entry.js"
   },
   "exports": {
     ".": {

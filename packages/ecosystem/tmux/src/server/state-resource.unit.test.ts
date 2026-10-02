@@ -50,6 +50,17 @@ const setup = () => {
 };
 
 describe("tmux state resource", () => {
+  it("refreshes reads even when there is no active subscriber", async () => {
+    const { backend, publish } = setup();
+    const resource = tmuxResource({ backend });
+    await resource.read(undefined, context());
+    publish(tmuxState("changed externally"));
+    expect(
+      (await resource.read(undefined, context())).hierarchy.sessions[0]?.name,
+    ).toBe("changed externally");
+    expect(backend.refresh).toHaveBeenCalledTimes(2);
+  });
+
   it("subscribes immediately and reads invalidated cached state", async () => {
     const { backend, publish } = setup();
     const resource = tmuxResource({ backend });

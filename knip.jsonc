@@ -51,7 +51,11 @@
       ],
     },
     "packages/runtime/overmux": {
-      "entry": ["src/internal/client/auth/entry.tsx", "src/public/*.ts"],
+      "entry": [
+        "src/internal/client/auth/entry.tsx",
+        "src/internal/server/worker-entry.ts",
+        "src/public/*.ts",
+      ],
     },
     "packages/runtime/shared": {
       "entry": ["src/index.ts", "src/node/index.ts"],
