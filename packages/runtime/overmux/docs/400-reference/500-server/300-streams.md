@@ -131,6 +131,8 @@ Overmux calls `dispose` once when the session closes. Use it to stop timers, rem
 
 The stream context provides an abort `signal` for cancelling background work and `fail(cause)` for failing and closing the session. See [Server API: Stream handlers](./500-api.md#stream-handlers).
 
+Use `context.logger` for [structured logging](./500-api.md#logging) in the handler and its message and cleanup callbacks.
+
 ## How streams work
 
 Streams communicate over a persistent WebSocket connection between your browser and server.

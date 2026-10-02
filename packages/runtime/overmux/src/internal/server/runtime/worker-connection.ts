@@ -1,5 +1,7 @@
 import { Worker } from "node:worker_threads";
 import type { Notifications } from "../../../public/notifications";
+import type { HandlerLogCorrelation } from "./handler-logger";
+import type { ServerLogger, ServerLogEntry } from "../server-logger";
 import {
   deserializeWorkerError,
   workerLimits,
@@ -49,6 +51,7 @@ type SessionState =
   | { status: "closed"; completion: Promise<void>; failure?: Error };
 
 type OpenSessionOptions = {
+  correlation?: HandlerLogCorrelation;
   action: "resource-subscribe" | "stream-open";
   name: string;
   input: unknown;
@@ -89,6 +92,7 @@ export type WorkerConnection = {
 };
 
 type ConnectionOptions = {
+  serverLogger?: ServerLogger;
   name: string;
   init: WorkerInit;
   notifications: Notifications;
@@ -392,13 +396,14 @@ export const createWorkerConnection = (
     // Register before send: output can precede the setup reply. Closing keeps this
     // capacity occupied until remote cleanup completes or the worker dies.
     sessions.set(id, session);
-    const { action, name, input, signal } = sessionOptions;
+    const { action, name, input, signal, correlation } = sessionOptions;
     try {
       await request(
         {
           action,
           name,
           input,
+          correlation,
           sessionId: id,
         },
         signal,
@@ -458,6 +463,17 @@ export const createWorkerConnection = (
       if (message.type === "stream-error") {
         const error = deserializeWorkerError(message.error);
         sessions.get(message.sessionId)?.fail(error);
+      }
+      if (message.type === "log") {
+        // Use the existing sink, not a worker-owned file writer. Sink failures must
+        // neither kill the worker nor prevent returning its bounded receipt credit.
+        contain(() => {
+          const entry = JSON.parse(message.entry) as ServerLogEntry;
+          options.serverLogger?.log({
+            ...entry,
+            details: { ...entry.details, worker: options.name },
+          });
+        });
       }
       if (message.type === "notification") {
         // Await semantics survive IPC. The worker caps outstanding delivery promises.

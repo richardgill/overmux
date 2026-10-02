@@ -1,4 +1,5 @@
 import type { RuntimeConfigSettings } from "@overmux/shared/node";
+import type { ServerLogger } from "../server-logger";
 import type { InstanceIdentity } from "../../../public/index";
 import type { Notifications } from "../../../public/notifications";
 import { createRuntimeInstance, defaultInstanceId } from "./runtime-instance";
@@ -20,7 +21,7 @@ import {
 
 type CreateWorkerRuntimeOptions = {
   configPath: string;
-  debug?: boolean;
+  serverLogger?: ServerLogger;
   notifications?: Notifications;
   aliases?: Record<string, string>;
   startupMs?: number;
@@ -48,11 +49,12 @@ const launchWorker = (
       type: "init",
       configPath: options.configPath,
       aliases: options.aliases,
-      debug: options.debug,
+      logLevel: options.serverLogger?.logLevel,
       role: selection.role,
       stream: selection.stream,
     },
     notifications: options.notifications,
+    serverLogger: options.serverLogger,
     startupMs: options.startupMs,
     shutdownMs: options.shutdownMs,
   });

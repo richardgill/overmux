@@ -5,6 +5,8 @@ import type { RuntimeManifest } from "../../shared/index";
 import { z } from "zod";
 import { ProtocolError, protocolErrorCodeSchema } from "../protocol-error";
 import { OperationValidationError } from "./runtime-operations";
+import type { LogLevel } from "../../../public/index";
+import type { HandlerLogCorrelation } from "./handler-logger";
 
 // Credits bound all worker-to-main traffic together, not just each terminal.
 export const workerLimits = {
@@ -15,6 +17,8 @@ export const workerLimits = {
   eventBytes: 8 * 1024 * 1024,
   lifetimes: 128,
   notifications: 32,
+  logCount: 64,
+  logBytes: 256 * 1024,
   startupMs: 10_000,
   streams: 64,
   shutdownMs: 1_000,
@@ -116,6 +120,7 @@ export const postWorkerMessage = (
 
 export type WorkerRequest = {
   id: number;
+  correlation?: HandlerLogCorrelation;
   action:
     | "resource-read"
     | "resource-subscribe"
@@ -135,7 +140,7 @@ export type WorkerInit = {
   type: "init";
   configPath: string;
   aliases: Record<string, string>;
-  debug?: boolean;
+  logLevel?: LogLevel;
   // Unselected definitions are constructed on import, but never activated.
   role: "application" | "stream" | "metadata";
   stream?: string;
@@ -149,6 +154,7 @@ export type WorkerReady = {
 };
 
 export type WorkerEvent =
+  | { type: "log"; entry: string }
   | { type: "closed"; sessionId: number; error?: WorkerError }
   | { type: "invalidate"; sessionId: number }
   | { type: "stream-output"; sessionId: number; message: unknown }

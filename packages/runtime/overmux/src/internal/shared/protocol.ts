@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { instanceIdSchema } from "@overmux/shared";
+import { instanceIdSchema, logLevelSchema } from "@overmux/shared";
 
 import { notificationSchema } from "../../public/notifications";
 
 // Compatibility gate, not negotiation: open tabs may still run older client assets.
 // The exact version rejects incompatible runtime manifest and wire formats before later traffic.
-export const protocolVersion = 10 as const;
+export const protocolVersion = 11 as const;
 
 // Application-defined WebSocket close codes shared by server and browser transports.
 export const webSocketCloseCode = {
@@ -14,7 +14,7 @@ export const webSocketCloseCode = {
 } as const;
 
 export const runtimeManifestSchema = z.object({
-  debug: z.boolean(),
+  logLevel: logLevelSchema,
   operations: z.array(z.string().min(1)),
   protocolVersion: z.literal(protocolVersion),
   resources: z.array(z.string().min(1)),

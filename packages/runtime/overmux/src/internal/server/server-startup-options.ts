@@ -2,6 +2,7 @@ import {
   serverConfigRuntimeSchema,
   type RuntimeConfigSettings,
 } from "@overmux/shared/node";
+import { logLevelSchema, type LogLevel } from "@overmux/shared";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 
@@ -10,13 +11,13 @@ import type { ServerConfigDefinition } from "../../public/index";
 const serverStartupOverridesRuntimeSchema = serverConfigRuntimeSchema
   .omit({ port: true })
   .extend({
-    debug: z.boolean().optional(),
+    logLevel: logLevelSchema.optional(),
     // Port 0 asks the OS for a free port for internal listeners and tests; it must not leak into user config.
     port: z.number().int().min(0).max(65_535).optional(),
   });
 
 export type ResolvedServerStartupOptions = {
-  debug: boolean;
+  logLevel: LogLevel;
   host: string;
   port: number;
   productionWebAssetsDir?: string;
@@ -30,7 +31,7 @@ export const resolveServerStartupOptions = ({
 }: {
   config: RuntimeConfigSettings;
   configPath: string;
-  overrides?: ServerConfigDefinition & { debug?: boolean };
+  overrides?: ServerConfigDefinition & { logLevel?: LogLevel };
 }): ResolvedServerStartupOptions => {
   const validatedOverrides =
     serverStartupOverridesRuntimeSchema.parse(overrides);
@@ -42,7 +43,7 @@ export const resolveServerStartupOptions = ({
     : configuredWebAssetsDir;
 
   return {
-    debug: validatedOverrides.debug ?? config.debug ?? true,
+    logLevel: validatedOverrides.logLevel ?? config.logLevel ?? "info",
     host: validatedOverrides.host ?? config.host ?? "localhost",
     port: validatedOverrides.port ?? config.port ?? 4242,
     ...(productionWebAssetsDir === undefined ? {} : { productionWebAssetsDir }),

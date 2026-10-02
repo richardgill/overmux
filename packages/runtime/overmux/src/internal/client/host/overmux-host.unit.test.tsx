@@ -1,6 +1,14 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test as testCases,
+  vi,
+} from "vitest";
 
 import {
   createInstanceIdentity,
@@ -40,9 +48,9 @@ import { OvermuxHost } from "./overmux-host";
 
 const roots: ReturnType<typeof createRoot>[] = [];
 const manifest = {
-  debug: false,
+  logLevel: "info",
   operations: [],
-  protocolVersion: 10,
+  protocolVersion: 11,
   resources: [],
   streams: [],
 };
@@ -86,6 +94,37 @@ describe("OvermuxHost", () => {
     );
     expect(document.querySelector("[data-om-scope]")).toBeNull();
   });
+
+  testCases.each(["debug", "info", "warn", "error"])(
+    "forwards browser console only at debug, not %s otherwise",
+    async (logLevel) => {
+      const methods = ["log", "info", "warn", "error", "debug"] as const;
+      methods.forEach((method) =>
+        vi.spyOn(console, method).mockImplementation(() => undefined),
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(JSON.stringify({ ...manifest, logLevel })),
+          ),
+      );
+      await renderHost();
+
+      transport.reportDiagnostic.mockClear();
+      console.info("browser-diagnostic");
+      console.error("browser-error");
+      expect(transport.reportDiagnostic).toHaveBeenCalledTimes(
+        logLevel === "debug" ? 2 : 0,
+      );
+
+      await act(async () => roots.pop()!.unmount());
+      transport.reportDiagnostic.mockClear();
+      console.info("after-unmount");
+      expect(transport.reportDiagnostic).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps lifecycle UI mounted when the user app fails", async () => {
     vi.stubGlobal(

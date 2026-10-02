@@ -10,6 +10,7 @@ import type {
 import { createRuntimeInstance, defaultInstanceId } from "./runtime-instance";
 import { protocolVersion, type RuntimeManifest } from "../../shared/index";
 
+import type { ServerLogger } from "../server-logger";
 import { createRuntimeLifecycle } from "./runtime-lifecycle";
 import {
   createRuntimeOperations,
@@ -41,16 +42,16 @@ export type Runtime = {
 
 type CreateRuntimeOptions = {
   config: RuntimeConfigDefinition;
-  debug?: boolean;
   notifications?: Notifications;
   signal?: AbortSignal;
+  serverLogger?: ServerLogger;
 };
 
 export const createRuntime = async ({
   config,
-  debug = true,
   notifications = { send: async () => undefined },
   signal,
+  serverLogger,
 }: CreateRuntimeOptions): Promise<Runtime> => {
   const lifecycle = createRuntimeLifecycle(signal);
   const instance = createRuntimeInstance(
@@ -62,6 +63,7 @@ export const createRuntime = async ({
         {}) as RuntimeResourceDefinitions,
       instance: instance.context,
       lifecycle,
+      serverLogger,
     });
     const context = resources.context;
     const operations = createRuntimeOperations({
@@ -69,18 +71,20 @@ export const createRuntime = async ({
       definitions: (config.server.operations ??
         {}) as RuntimeOperationDefinitions,
       notifications,
+      serverLogger,
     });
     const streams = createRuntimeStreams({
       instance: instance.context,
       definitions: (config.server.streams ?? {}) as RuntimeStreamDefinitions,
       lifecycle,
+      serverLogger,
     });
 
     lifecycle.signal.throwIfAborted();
     lifecycle.completePreparation();
 
     const manifest: RuntimeManifest = {
-      debug,
+      logLevel: serverLogger?.logLevel ?? config.logLevel ?? "info",
       operations: [...operations.names],
       protocolVersion,
       resources: [...resources.names],

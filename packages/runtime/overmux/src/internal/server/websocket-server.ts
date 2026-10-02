@@ -168,7 +168,11 @@ export const createWebSocketServer = ({
     head: Buffer,
   ) => {
     const correlationId = serverLogger?.id();
-    serverLogger?.log({ correlationId, event: "websocket-connect" });
+    serverLogger?.log({
+      correlationId,
+      event: "websocket-connect",
+      level: "debug",
+    });
     const path = requestPath(request);
     const isRuntimeSocket = path === runtimeWebSocketPath;
     const isViteSocket =

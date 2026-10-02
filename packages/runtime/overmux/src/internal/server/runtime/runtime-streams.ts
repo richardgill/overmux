@@ -8,6 +8,11 @@ import type {
 import { z } from "zod";
 
 import type { RuntimeLifecycle } from "./runtime-lifecycle";
+import type { ServerLogger } from "../server-logger";
+import {
+  createHandlerLogger,
+  type HandlerLogCorrelation,
+} from "./handler-logger";
 
 export type RuntimeStreamSession = {
   dispose: () => Promise<void>;
@@ -20,6 +25,7 @@ export type RuntimeStream = {
     emit: (message: unknown) => void,
     signal?: AbortSignal,
     onError?: (cause: unknown) => void,
+    correlation?: HandlerLogCorrelation,
   ) => Promise<RuntimeStreamSession>;
 };
 
@@ -38,6 +44,7 @@ export type RuntimeStreamDefinitions = Readonly<Record<string, AnyStream>>;
 
 type CreateRuntimeStreamsOptions = {
   instance: StreamContext["instance"];
+  serverLogger?: ServerLogger;
   definitions: RuntimeStreamDefinitions;
   lifecycle: RuntimeLifecycle;
 };
@@ -46,6 +53,7 @@ export const createRuntimeStreams = ({
   instance,
   definitions,
   lifecycle,
+  serverLogger,
 }: CreateRuntimeStreamsOptions): RuntimeStreams => {
   const streams = new Map<string, RuntimeStream>();
   Object.entries(definitions).forEach(([name, definition]) => {
@@ -53,7 +61,7 @@ export const createRuntimeStreams = ({
       throw new Error("Stream names must not be empty");
     }
     streams.set(name, {
-      open: async (rawInput, emit, requestSignal, onError) => {
+      open: async (rawInput, emit, requestSignal, onError, correlation) => {
         const sessionController = new AbortController();
         const sessionSignal = requestSignal
           ? AbortSignal.any([requestSignal, sessionController.signal])
@@ -79,6 +87,13 @@ export const createRuntimeStreams = ({
         };
         const session = await definition.open(input, {
           instance,
+          logger: createHandlerLogger({
+            serverLogger,
+            correlation,
+            capabilityKind: "stream",
+            registeredName: name,
+            handler: "open",
+          }),
           emit: (message) => {
             if (operationSignal.aborted) {
               return;

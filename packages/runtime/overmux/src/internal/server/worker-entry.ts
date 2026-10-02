@@ -1,4 +1,6 @@
 import { parentPort } from "node:worker_threads";
+import { randomUUID } from "node:crypto";
+import { isServerLogEnabled, serializeServerLogEntry } from "./server-logger";
 import { loadOvermuxConfig } from "@overmux/shared/node";
 import { protocolVersion } from "../shared/index";
 import { createRuntime } from "./runtime/create-runtime";
@@ -37,7 +39,10 @@ const requests = new Map<number, AbortController>();
 // IDs are unique across requests, subscriptions, and streams.
 const lifetimes = new Map<number, Lifetime>();
 const invalidations = new Map<number, { deliveryId: number; dirty: boolean }>();
-const deliveries = new Map<number, { bytes: number; sessionId?: number }>();
+const deliveries = new Map<
+  number,
+  { bytes: number; sessionId?: number; log: boolean }
+>();
 const notifications = new Map<
   number,
   { resolve: () => void; reject: (cause: Error) => void }
@@ -48,6 +53,9 @@ let stopping = false;
 let deliveryId = 0;
 let notificationId = 0;
 let deliveryBytes = 0;
+let logCount = 0;
+let logBytes = 0;
+let logsSaturated = false;
 
 const send = (
   message:
@@ -66,7 +74,8 @@ const send = (
   const data =
     message.type === "stream-output" ||
     message.type === "invalidate" ||
-    message.type === "notification";
+    message.type === "notification" ||
+    message.type === "log";
   // Leave room for every admitted request's failure and each active stream's final error.
   const countLimit = data
     ? workerLimits.eventCount -
@@ -79,15 +88,26 @@ const send = (
   if (
     bytes > workerLimits.messageBytes ||
     deliveries.size >= countLimit ||
-    deliveryBytes + bytes > byteLimit
+    deliveryBytes + bytes > byteLimit ||
+    (message.type === "log" &&
+      (logCount >= workerLimits.logCount ||
+        logBytes + bytes > workerLimits.logBytes))
   ) {
+    if (message.type === "log") {
+      logsSaturated = logCount > 0;
+    }
     throw new Error("Worker output queue is full or message exceeds 1 MiB");
   }
   deliveries.set(deliveryId, {
     bytes,
+    log: message.type === "log",
     ...(message.type === "invalidate" ? { sessionId: message.sessionId } : {}),
   });
   deliveryBytes += bytes;
+  if (message.type === "log") {
+    logCount += 1;
+    logBytes += bytes;
+  }
   postWorkerMessage(port, packet);
   return deliveryId;
 };
@@ -156,6 +176,11 @@ const acknowledge = (id: number) => {
   }
   deliveries.delete(id);
   deliveryBytes -= delivery.bytes;
+  if (delivery.log) {
+    logsSaturated = false;
+    logCount -= 1;
+    logBytes -= delivery.bytes;
+  }
   if (delivery.sessionId !== undefined) {
     const pending = invalidations.get(delivery.sessionId);
     invalidations.delete(delivery.sessionId);
@@ -181,14 +206,14 @@ const fatal = (cause: unknown) => {
 const load = async ({
   configPath,
   aliases,
-  debug,
+  logLevel,
   role,
   stream,
 }: WorkerInit) => {
   const { config } = await loadOvermuxConfig({ configPath, aliases });
   const { server, instanceId: configuredIdentity, ...settings } = config;
   const manifest = {
-    debug: debug ?? config.debug ?? true,
+    logLevel: logLevel ?? config.logLevel ?? "info",
     protocolVersion,
     resources: Object.keys(server.resources),
     operations: Object.keys(server.operations ?? {}),
@@ -221,7 +246,28 @@ const load = async ({
                 streams: { [stream!]: server.streams![stream!] },
               },
       },
-      debug: manifest.debug,
+      serverLogger: {
+        logLevel: manifest.logLevel,
+        id: randomUUID,
+        log: (entry) => {
+          // Logs share receipt credits but have a much smaller budget. Drop at
+          // saturation, before serialization, reserving work/control capacity.
+          // Do not gate on stopping: cleanup closures may still log after abort.
+          if (
+            !isServerLogEnabled(manifest.logLevel, entry) ||
+            logsSaturated ||
+            logCount >= workerLimits.logCount ||
+            logBytes >= workerLimits.logBytes
+          ) {
+            return;
+          }
+          try {
+            send({ type: "log", entry: serializeServerLogEntry(entry) });
+          } catch {
+            // Best effort, including oversize entries and closed transports.
+          }
+        },
+      },
       notifications: {
         send: async (notification) => {
           if (stopping || notifications.size >= workerLimits.notifications) {
@@ -283,14 +329,18 @@ const execute = async (message: WorkerRequest, controller: AbortController) => {
     if (!resource) {
       throw new Error("Resource not found");
     }
-    return resource.read(message.input, controller.signal);
+    return resource.read(message.input, controller.signal, message.correlation);
   }
   if (message.action === "operation") {
     const operation = runtime.getOperation(message.name!);
     if (!operation) {
       throw new Error("Operation not found");
     }
-    return operation.execute(message.input, controller.signal);
+    return operation.execute(
+      message.input,
+      controller.signal,
+      message.correlation,
+    );
   }
   if (message.action === "stream-message") {
     const lifetime = lifetimes.get(message.sessionId!);
@@ -320,6 +370,7 @@ const execute = async (message: WorkerRequest, controller: AbortController) => {
         },
         controller.signal,
         (cause) => failStream(id, cause),
+        message.correlation,
       );
       lifetime.dispose = session.dispose;
       lifetime.send = session.send;
@@ -332,6 +383,8 @@ const execute = async (message: WorkerRequest, controller: AbortController) => {
         message.input,
         () => invalidate(id),
         controller.signal,
+        undefined,
+        message.correlation,
       );
       lifetime.dispose = async () => dispose();
     }

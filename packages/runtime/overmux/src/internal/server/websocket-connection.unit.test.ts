@@ -15,6 +15,8 @@ import {
 import {
   defineOvermuxServer,
   defineResourceContract,
+  defineStreamContract,
+  type ConfigDefinition,
   type SubscriptionResourceDefinition,
 } from "../../public/index";
 import { createRuntime } from "./runtime/create-runtime";
@@ -65,7 +67,9 @@ const attach = async ({
   subscribe,
   read = () => 1,
   serverLogger,
+  streams,
 }: {
+  streams?: ConfigDefinition["streams"];
   subscribe: CountResource["subscribe"];
   read?: CountResource["read"];
   serverLogger?: ServerLogger;
@@ -82,10 +86,11 @@ const attach = async ({
             subscribe,
           },
         },
+        streams,
       }),
     ),
   };
-  const runtime = await createRuntime({ config });
+  const runtime = await createRuntime({ config, serverLogger });
   const socket = createSocket();
   attachWebSocketConnection({
     runtime,
@@ -157,6 +162,176 @@ testCases.each(errorCases)("WebSocket maps $name", async ({ cause, code }) => {
 });
 
 describe("WebSocket resource subscriptions", () => {
+  testCases.each(["debug", "info", "warn", "error"] as const)(
+    "accepts browser diagnostics only at debug (configured %s)",
+    async (logLevel) => {
+      const log = vi.fn<ServerLogger["log"]>();
+      const { runtime, socket } = await attach({
+        serverLogger: { logLevel, id: () => "connection", log },
+        subscribe: () => () => undefined,
+      });
+      try {
+        log.mockClear();
+        send(socket, {
+          type: "client-diagnostic",
+          level: "error",
+          message: "browser error",
+          arguments: "[]",
+          timestamp: new Date().toISOString(),
+        });
+        expect(log).toHaveBeenCalledTimes(logLevel === "debug" ? 1 : 0);
+      } finally {
+        await runtime.dispose();
+      }
+    },
+  );
+
+  it("correlates reads, subscriptions, and stream closures with transport identities", async () => {
+    const log = vi.fn<ServerLogger["log"]>();
+    const { runtime, socket } = await attach({
+      serverLogger: {
+        logLevel: "debug" as const,
+        id: () => "connection-1",
+        log,
+      },
+      read: (_input, { logger }) => {
+        logger.info("read-value");
+        return 1;
+      },
+      subscribe: (_input, _invalidate, { logger, signal }) => {
+        logger.info("subscribed");
+        return () => {
+          logger.info("unsubscribed", { aborted: signal.aborted });
+        };
+      },
+      streams: {
+        events: {
+          contract: defineStreamContract({
+            input: z.void(),
+            clientMessage: z.string(),
+            serverMessage: z.string(),
+          }),
+          open: (_input, { logger, signal }) => {
+            logger.info("opened");
+            return {
+              onMessage: () => {
+                logger.debug("received");
+              },
+              dispose: () => {
+                logger.info("closed", { aborted: signal.aborted });
+              },
+            };
+          },
+        },
+      },
+    });
+    try {
+      for (const suffix of ["1", "2"]) {
+        send(socket, {
+          type: "resource-read",
+          resourceName: "count",
+          operationId: `read-${suffix}`,
+        });
+        send(
+          socket,
+          subscription({
+            operationId: `subscribe-${suffix}`,
+            subscriptionId: `subscription-${suffix}`,
+          }),
+        );
+        send(socket, {
+          type: "stream-open",
+          streamName: "events",
+          operationId: `open-${suffix}`,
+          streamId: `stream-${suffix}`,
+        });
+      }
+      await vi.waitFor(() =>
+        expect(
+          socket.sent.filter(({ type }) => type === "stream-opened"),
+        ).toHaveLength(2),
+      );
+      for (const suffix of ["1", "2"]) {
+        send(socket, {
+          type: "stream-message",
+          streamId: `stream-${suffix}`,
+          message: "private-content",
+        });
+      }
+      await vi.waitFor(() =>
+        expect(
+          log.mock.calls.filter(([entry]) => entry.event === "received"),
+        ).toHaveLength(2),
+      );
+      socket.emit("close", 1000, Buffer.alloc(0));
+      await vi.waitFor(() =>
+        expect(
+          log.mock.calls.filter(([entry]) => entry.event === "closed"),
+        ).toHaveLength(2),
+      );
+
+      const entries = log.mock.calls.map(([entry]) => entry);
+      for (const suffix of ["1", "2"]) {
+        const expected = [
+          {
+            event: "read-value",
+            correlationId: `read-${suffix}`,
+            details: {
+              capabilityKind: "resource",
+              registeredName: "count",
+              handler: "read",
+            },
+          },
+          ...["subscribed", "unsubscribed"].map((event) => ({
+            event,
+            correlationId: `subscribe-${suffix}`,
+            details: {
+              capabilityKind: "resource",
+              registeredName: "count",
+              handler: "subscribe",
+              subscriptionId: `subscription-${suffix}`,
+            },
+          })),
+          ...["opened", "received", "closed"].map((event) => ({
+            event,
+            correlationId: `open-${suffix}`,
+            details: {
+              capabilityKind: "stream",
+              registeredName: "events",
+              handler: "open",
+              streamId: `stream-${suffix}`,
+            },
+          })),
+        ];
+        expected.forEach((entry) =>
+          expect(entries).toContainEqual(
+            expect.objectContaining({
+              ...entry,
+              details: expect.objectContaining({
+                ...entry.details,
+                connectionId: "connection-1",
+              }),
+            }),
+          ),
+        );
+      }
+      expect(
+        entries.filter(({ event }) =>
+          ["closed", "unsubscribed"].includes(event),
+        ),
+      ).toEqual(
+        Array.from({ length: 4 }, () =>
+          expect.objectContaining({
+            details: expect.objectContaining({ data: { aborted: true } }),
+          }),
+        ),
+      );
+      expect(JSON.stringify(entries)).not.toContain("private-content");
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("returns an async setup rejection to its subscription operation", async () => {
     const setup = deferred<() => void>();
     const started = deferred<void>();
@@ -309,7 +484,11 @@ describe("WebSocket resource subscriptions", () => {
           replacementStarted.resolve();
           return replacementSetup.promise;
         },
-        serverLogger: { enabled: true, id: () => "connection", log },
+        serverLogger: {
+          logLevel: "debug" as const,
+          id: () => "connection",
+          log,
+        },
       });
 
       send(socket, subscription({ operationId: "old" }));

@@ -57,17 +57,20 @@ export const createOperationHandler =
       correlationId,
       details: { registeredName: context.req.param("name") },
       event: "operation-start",
+      level: "debug",
     });
     try {
       const output = await operation.execute(
         parsed.input,
         context.req.raw.signal,
+        { correlationId },
       );
       serverLogger?.log({
         correlationId,
         details: { registeredName: context.req.param("name") },
         durationMs: Date.now() - startedAt,
         event: "operation-complete",
+        level: "debug",
       });
       return operation.returnsVoid
         ? new Response(undefined, { status: 204 })

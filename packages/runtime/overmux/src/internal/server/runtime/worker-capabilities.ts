@@ -7,9 +7,12 @@ export const createWorkerResource = (
   connection: WorkerConnection,
   name: string,
 ): RuntimeResource => ({
-  read: (input, signal) =>
-    connection.request({ action: "resource-read", input, name }, signal),
-  subscribe: async (input, listener, signal, onError) => {
+  read: (input, signal, correlation) =>
+    connection.request(
+      { action: "resource-read", input, name, correlation },
+      signal,
+    ),
+  subscribe: async (input, listener, signal, onError, correlation) => {
     const session = await connection.openSession({
       action: "resource-subscribe",
       name,
@@ -17,6 +20,7 @@ export const createWorkerResource = (
       signal,
       onEvent: listener,
       onError,
+      correlation,
     });
     return session.close;
   },
@@ -27,8 +31,11 @@ export const createWorkerOperation = (
   name: string,
   returnsVoid: boolean,
 ): RuntimeOperation => ({
-  execute: (input, signal) =>
-    connection.request({ action: "operation", input, name }, signal),
+  execute: (input, signal, correlation) =>
+    connection.request(
+      { action: "operation", input, name, correlation },
+      signal,
+    ),
   returnsVoid,
 });
 
@@ -36,7 +43,7 @@ export const createWorkerStream = (
   connection: WorkerConnection,
   name: string,
 ): RuntimeStream => ({
-  open: async (input, emit, signal, onError) => {
+  open: async (input, emit, signal, onError, correlation) => {
     const session = await connection.openSession({
       action: "stream-open",
       name,
@@ -44,6 +51,7 @@ export const createWorkerStream = (
       signal,
       onEvent: emit,
       onError,
+      correlation,
     });
     return {
       dispose: session.close,

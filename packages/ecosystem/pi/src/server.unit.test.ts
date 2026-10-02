@@ -20,6 +20,12 @@ import {
 } from "./server";
 
 const directories: string[] = [];
+const logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const instance = {
   getInstanceId: () => "test",
   getDeepLinkPrefix: () => "overmux://test",
@@ -207,6 +213,7 @@ describe("Pi server plugin", () => {
       { agentId: sessionId },
       {
         instance,
+        logger,
         emit,
         fail: vi.fn(),
         signal: new AbortController().signal,
@@ -253,6 +260,7 @@ describe("Pi server plugin", () => {
     const controller = new AbortController();
     const context = {
       instance,
+      logger,
       invalidate: vi.fn(),
       signal: controller.signal,
     };
@@ -297,6 +305,7 @@ describe("Pi server plugin", () => {
         { agentId: "agent" },
         {
           instance,
+          logger,
           emit: vi.fn(),
           fail: vi.fn(),
           signal: new AbortController().signal,
@@ -335,6 +344,7 @@ describe("Pi server plugin", () => {
     });
     const context = {
       instance,
+      logger,
       fail: vi.fn(),
       invalidate: vi.fn(),
       notifications: { send: async () => undefined },
@@ -349,7 +359,7 @@ describe("Pi server plugin", () => {
     const [stream, operation] = await Promise.all([
       piConversationStream({ agents }).open(
         { agentId: sessionId },
-        { instance, signal: context.signal, fail: context.fail, emit },
+        { instance, logger, signal: context.signal, fail: context.fail, emit },
       ),
       piOperationHandlers({ agents }).sendPiMessage.handle(
         { agentId: sessionId, deliverAs: "steer", message: "Review this" },
@@ -393,6 +403,7 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
+        logger,
         signal: controller.signal,
       },
     );
@@ -442,6 +453,7 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
+        logger,
         signal: new AbortController().signal,
       },
     );
@@ -495,6 +507,7 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
+        logger,
         signal: new AbortController().signal,
       },
     );
@@ -585,6 +598,7 @@ describe("Pi server plugin", () => {
         emit,
         fail: vi.fn(),
         instance,
+        logger,
         signal: new AbortController().signal,
       },
     );
@@ -634,6 +648,7 @@ describe("Pi server plugin", () => {
     const operations = piOperationHandlers({ agents });
     const context = {
       instance,
+      logger,
       invalidate: vi.fn(),
       notifications: { send: async () => undefined },
       signal: new AbortController().signal,
@@ -696,6 +711,7 @@ describe("Pi server plugin", () => {
         { agentId: sessionId, deliverAs: "steer", message: "Review this" },
         {
           instance,
+          logger,
           invalidate: vi.fn(),
           notifications: { send: async () => undefined },
           signal: new AbortController().signal,

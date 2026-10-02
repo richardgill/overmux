@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { aiContextSnippets } from "@overmux/ai-context";
 import { instanceIdSchema } from "../instance";
+import { logLevelSchema } from "../log-level";
 
 const zodTypeSchema = z.custom<z.ZodType>(
   (value) => value instanceof z.ZodType,
@@ -121,22 +122,24 @@ export const serverDefinitionRuntimeSchema = z.object({
   streams: z.record(z.string(), streamHandlerRuntimeSchema).optional(),
 });
 
-export const configDefinitionRuntimeSchema = serverConfigRuntimeSchema.extend({
-  aiContextSnippets: z.array(z.enum(aiContextSnippets)).optional(),
-  auth: authConfigRuntimeSchema,
-  debug: z.boolean().optional(),
-  instanceId: z
-    .union([
-      instanceIdSchema,
-      z.custom<(context: { port: number }) => string>(
-        (value) => typeof value === "function",
-        "Expected an instance ID or a function of the bound port",
-      ),
-    ])
-    .optional(),
-  server: serverDefinitionRuntimeSchema,
-  vite: z.string().min(1).optional(),
-});
+export const configDefinitionRuntimeSchema = serverConfigRuntimeSchema
+  .extend({
+    aiContextSnippets: z.array(z.enum(aiContextSnippets)).optional(),
+    auth: authConfigRuntimeSchema,
+    logLevel: logLevelSchema.optional(),
+    instanceId: z
+      .union([
+        instanceIdSchema,
+        z.custom<(context: { port: number }) => string>(
+          (value) => typeof value === "function",
+          "Expected an instance ID or a function of the bound port",
+        ),
+      ])
+      .optional(),
+    server: serverDefinitionRuntimeSchema,
+    vite: z.string().min(1).optional(),
+  })
+  .strict();
 
 export type RuntimeConfigDefinition = z.infer<
   typeof configDefinitionRuntimeSchema

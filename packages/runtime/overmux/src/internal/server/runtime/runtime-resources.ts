@@ -5,6 +5,12 @@ import {
   type ResourceDefinition,
   type RuntimeDisposer,
 } from "../../../public/index";
+import { randomUUID } from "node:crypto";
+import type { ServerLogger } from "../server-logger";
+import {
+  createHandlerLogger,
+  type HandlerLogCorrelation,
+} from "./handler-logger";
 import { isDeepStrictEqual } from "node:util";
 import {
   createResourceDependencyGraph,
@@ -14,12 +20,17 @@ import {
 import type { RuntimeLifecycle } from "./runtime-lifecycle";
 
 export type RuntimeResource = {
-  read: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
+  read: (
+    input: unknown,
+    signal?: AbortSignal,
+    correlation?: HandlerLogCorrelation,
+  ) => Promise<unknown>;
   subscribe: (
     input: unknown,
     listener: () => void,
     signal?: AbortSignal,
     onError?: (cause: unknown) => void,
+    correlation?: HandlerLogCorrelation,
   ) => Promise<RuntimeDisposer>;
 };
 
@@ -30,7 +41,7 @@ export type RuntimeResourceDefinitions = Readonly<
 export type RuntimeHandlerContext = HandlerContext<Record<string, unknown>>;
 
 export type RuntimeResources = {
-  context: (signal?: AbortSignal) => RuntimeHandlerContext;
+  context: (signal?: AbortSignal) => Omit<RuntimeHandlerContext, "logger">;
   get: (name: string) => RuntimeResource | undefined;
   invalidate: RuntimeHandlerContext["invalidate"];
   names: readonly string[];
@@ -46,6 +57,7 @@ type CreateRuntimeResourcesOptions = {
   definitions: RuntimeResourceDefinitions;
   instance: HandlerContext["instance"];
   lifecycle: RuntimeLifecycle;
+  serverLogger?: ServerLogger;
 };
 
 const parseDependencyInputs = (
@@ -116,6 +128,7 @@ export const createRuntimeResources = ({
   definitions,
   instance,
   lifecycle,
+  serverLogger,
 }: CreateRuntimeResourcesOptions): RuntimeResources => {
   const graph = createResourceDependencyGraph(definitions);
   const invalidationListeners = new Set<InvalidationListener>();
@@ -150,7 +163,7 @@ export const createRuntimeResources = ({
     invalidateResource(resourceId, parsedInput, input === undefined);
   };
 
-  const context = (signal?: AbortSignal): RuntimeHandlerContext => ({
+  const context: RuntimeResources["context"] = (signal) => ({
     instance,
     invalidate,
     signal: lifecycle.requestSignal(signal),
@@ -160,13 +173,14 @@ export const createRuntimeResources = ({
     id: string,
     rawInput: unknown,
     signal?: AbortSignal,
+    correlation: HandlerLogCorrelation = { correlationId: randomUUID() },
     reads = new Map<string, Promise<unknown>>(),
   ): Promise<unknown> => {
     const existing = reads.get(id);
     if (existing) {
       return existing;
     }
-    const pending = readDefinition(id, rawInput, signal, reads);
+    const pending = readDefinition(id, rawInput, signal, correlation, reads);
     reads.set(id, pending);
     return pending;
   };
@@ -175,10 +189,20 @@ export const createRuntimeResources = ({
     id: string,
     rawInput: unknown,
     signal: AbortSignal | undefined,
+    correlation: HandlerLogCorrelation,
     reads: Map<string, Promise<unknown>>,
   ) => {
     const definition = definitions[id]!;
-    const handlerContext = context(signal);
+    const handlerContext = {
+      ...context(signal),
+      logger: createHandlerLogger({
+        serverLogger,
+        correlation,
+        capabilityKind: "resource",
+        registeredName: id,
+        handler: "read",
+      }),
+    };
     handlerContext.signal.throwIfAborted();
     const input = definition.contract.input.parse(rawInput);
     const dependencies =
@@ -193,6 +217,7 @@ export const createRuntimeResources = ({
                   dependencyId,
                   rawInput,
                   handlerContext.signal,
+                  correlation,
                   reads,
                 ),
               ]),
@@ -212,6 +237,7 @@ export const createRuntimeResources = ({
   const activateSubscriptions = async (
     inputs: ReadonlyMap<string, unknown>,
     subscription: ReturnType<typeof createSubscriptionLifetime>,
+    correlation: HandlerLogCorrelation,
   ) => {
     // Inputs are collected in dependency order and deduplicated before userland
     // runs, so synchronous invalidation can already match every reachable key.
@@ -226,7 +252,16 @@ export const createRuntimeResources = ({
               invalidateResource(id, input);
             }
           },
-          context(subscription.signal),
+          {
+            ...context(subscription.signal),
+            logger: createHandlerLogger({
+              serverLogger,
+              correlation,
+              capabilityKind: "resource",
+              registeredName: id,
+              handler: "subscribe",
+            }),
+          },
         );
         if (typeof dispose !== "function") {
           throw new Error(`Resource ${id} subscribe must return a disposer`);
@@ -244,8 +279,15 @@ export const createRuntimeResources = ({
 
   Object.keys(definitions).forEach((name) => {
     resources.set(name, {
-      read: (rawInput, signal) => read(name, rawInput, signal),
-      subscribe: async (rawInput, listener, signal) => {
+      read: (rawInput, signal, correlation) =>
+        read(name, rawInput, signal, correlation),
+      subscribe: async (
+        rawInput,
+        listener,
+        signal,
+        _onError,
+        correlation = { correlationId: randomUUID() },
+      ) => {
         lifecycle.requestSignal(signal).throwIfAborted();
         const inputs = parseDependencyInputs(
           definitions,
@@ -260,7 +302,7 @@ export const createRuntimeResources = ({
           signal,
         });
         try {
-          await activateSubscriptions(inputs, subscription);
+          await activateSubscriptions(inputs, subscription, correlation);
           subscription.signal.throwIfAborted();
           // Refresh only this subscriber to cover changes during setup. Returning
           // cleanup does not imply an external event source is already ready.

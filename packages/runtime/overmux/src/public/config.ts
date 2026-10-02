@@ -1,6 +1,8 @@
 import { z } from "zod";
+import type { LogLevel } from "@overmux/shared";
 
 import type { AiContextSnippetDefinition } from "./ai-context";
+import type { HandlerLogger } from "./handler-logger";
 import type { Notifications } from "./notifications";
 import type { ResourceContract, StreamContract } from "./contracts";
 
@@ -20,11 +22,15 @@ type InvalidationArguments<TInputs extends ResourceInputMap> = {
 
 export type HandlerContext<TInputs extends ResourceInputMap = {}> = {
   instance: InstanceContext;
+  logger: HandlerLogger;
   invalidate: (...args: InvalidationArguments<TInputs>) => void;
   signal: AbortSignal;
 };
 
-export type StreamContext = Pick<HandlerContext, "instance" | "signal">;
+export type StreamContext = Pick<
+  HandlerContext,
+  "instance" | "signal" | "logger"
+>;
 
 export type OperationContext<TInputs extends ResourceInputMap = {}> =
   HandlerContext<TInputs> & {
@@ -357,7 +363,7 @@ export type OvermuxConfigDefinition<
 > = ServerConfigDefinition & {
   aiContextSnippets?: AiContextSnippetDefinition;
   auth: AuthConfigDefinition;
-  debug?: boolean;
+  logLevel?: LogLevel;
   instanceId?: string | ((context: { port: number }) => string);
   server: TServer;
   vite?: string;

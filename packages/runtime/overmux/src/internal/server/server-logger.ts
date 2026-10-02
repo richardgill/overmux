@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { getOvermuxPaths } from "./paths";
 
-export type ServerLogLevel = "debug" | "error" | "info" | "warn";
+import type { LogLevel } from "../../public/index";
 
 export type ServerLogEntry = {
   // Groups related request, connection, and operation logs for diagnostics.
@@ -12,30 +12,22 @@ export type ServerLogEntry = {
   details?: Record<string, unknown>;
   durationMs?: number;
   event: string;
-  level?: ServerLogLevel;
+  level?: LogLevel;
   message?: string;
   source?: "browser" | "server";
   timestamp?: string;
 };
 
 export type ServerLogger = {
-  enabled: boolean;
+  logLevel: LogLevel;
   id: () => string;
   log: (entry: ServerLogEntry) => void;
 };
 
-type ConfigurableServerLogger = ServerLogger & {
-  setEnabled: (enabled: boolean) => void;
-};
-
-const lifecycleEvents = new Set([
-  "server-start",
-  "server-stop",
-  "websocket-close",
-  "websocket-close-event",
-  "websocket-connect",
-  "websocket-open",
-]);
+const severity = { debug: 10, info: 20, warn: 30, error: 40 } satisfies Record<
+  LogLevel,
+  number
+>;
 
 export const getServerLogFile = ({
   homeDir,
@@ -59,39 +51,35 @@ const safeJson = (value: unknown) => {
   }
 };
 
+export const isServerLogEnabled = (logLevel: LogLevel, entry: ServerLogEntry) =>
+  severity[entry.level ?? "info"] >= severity[logLevel];
+
+export const serializeServerLogEntry = (entry: ServerLogEntry) =>
+  safeJson({
+    ...entry,
+    timestamp: entry.timestamp ?? new Date().toISOString(),
+    level: entry.level ?? "info",
+    source: entry.source ?? "server",
+  });
+
 export const createServerLogger = ({
-  enabled,
+  logLevel,
   logFile,
 }: {
-  enabled: boolean;
+  logLevel: LogLevel;
   logFile: string;
-}): ConfigurableServerLogger => {
-  let debugEnabled = enabled;
+}): ServerLogger => {
   return {
-    get enabled() {
-      return debugEnabled;
-    },
+    logLevel,
     id: randomUUID,
     log: (entry) => {
-      if (
-        !debugEnabled &&
-        entry.level !== "error" &&
-        !lifecycleEvents.has(entry.event)
-      ) {
+      if (!isServerLogEnabled(logLevel, entry)) {
         return;
       }
-      const record = safeJson({
-        timestamp: entry.timestamp ?? new Date().toISOString(),
-        level: entry.level ?? "info",
-        source: entry.source ?? "server",
-        ...entry,
-      });
+      const record = serializeServerLogEntry(entry);
       mkdirSync(dirname(logFile), { recursive: true });
       appendFileSync(logFile, `${record}\n`, "utf8");
-      process.stderr.write(`[overmux:debug] ${record}\n`);
-    },
-    setEnabled: (nextEnabled) => {
-      debugEnabled = nextEnabled;
+      process.stderr.write(`[overmux] ${record}\n`);
     },
   };
 };

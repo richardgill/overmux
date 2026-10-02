@@ -13,3 +13,5 @@ export {
 } from "./deep-links";
 export { createInstanceIdentity, instanceIdSchema } from "./instance";
 export type { InstanceIdentity } from "./instance";
+export { logLevelSchema } from "./log-level";
+export type { LogLevel } from "./log-level";

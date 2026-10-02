@@ -14,6 +14,9 @@ import { WebSocket } from "ws";
 import type { Runtime } from "./create-runtime";
 import { createWorkerRuntime, loadWorkerConfig } from "./worker-runtime";
 import { createOperationHandler } from "../http/operation-handler";
+import { createRequestLoggingMiddleware } from "../http/request-logging";
+import type { ServerLogger } from "../server-logger";
+import type { LogLevel } from "../../../public/index";
 import { attachWebSocketConnection } from "../websocket-connection";
 import { decodeProtocolFrame, encodeProtocolMessage } from "../../shared/index";
 
@@ -114,7 +117,7 @@ const binaryViews = [
   },
 ];
 
-const createProject = async (code?: string) => {
+const createProject = async (code?: string, logLevel?: LogLevel) => {
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, "workers-"));
   directories.push(directory);
@@ -137,6 +140,7 @@ import server from "./lifecycle.server";
 import cheap from "./cheap.server";
 export default {
   auth: { mode: "cli-login" },
+  logLevel: ${JSON.stringify(logLevel)},
   instanceId: ({ port }) => "worker-test-" + port,
   server: { ...server, resources: { ...server.resources, ...cheap.resources } },
 };`,
@@ -150,7 +154,6 @@ const start = async (
 ) => {
   const runtime = await createWorkerRuntime({
     configPath: join(directory, "overmux.config.ts"),
-    debug: false,
     aliases,
     notifications: { send: async () => undefined },
     ...options,
@@ -206,6 +209,269 @@ afterEach(async () => {
   );
   vi.restoreAllMocks();
 });
+
+const createLoggingProject = async (logLevel?: LogLevel) =>
+  createProject(
+    (
+      await readFile(
+        new URL("./fixtures/logging-server.ts", import.meta.url),
+        "utf8",
+      )
+    ).replace('"../../../../public/index"', '"overmux"'),
+    logLevel,
+  );
+
+test("worker handler logs retain HTTP and WebSocket correlation through cleanup", async () => {
+  const log = vi.fn<ServerLogger["log"]>();
+  const serverLogger: ServerLogger = {
+    logLevel: "debug",
+    id: () => "transport-1",
+    log,
+  };
+  const runtime = await start(await createLoggingProject(), { serverLogger });
+  const app = new Hono();
+  app.use(createRequestLoggingMiddleware({ serverLogger }));
+  app.post(
+    "/api/operations/:name",
+    createOperationHandler({ runtime, serverLogger }),
+  );
+  const response = await app.request("/api/operations/log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify("normal"),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toBe("not-automatically-logged");
+  expect(response.headers.get("X-Overmux-Correlation-Id")).toBe("transport-1");
+
+  const sent: unknown[] = [];
+  const socket = Object.assign(new EventEmitter(), {
+    readyState: WebSocket.OPEN,
+    bufferedAmount: 0,
+    send: (frame: string | Uint8Array) => sent.push(decodeProtocolFrame(frame)),
+  });
+  attachWebSocketConnection({
+    runtime,
+    serverLogger,
+    socket: socket as unknown as WebSocket,
+  });
+  const messages = [
+    { type: "resource-read", resourceName: "count", operationId: "read-1" },
+    {
+      type: "resource-subscribe",
+      resourceName: "count",
+      operationId: "subscribe-1",
+      subscriptionId: "subscription-1",
+    },
+    {
+      type: "stream-open",
+      streamName: "events",
+      operationId: "open-1",
+      streamId: "stream-1",
+    },
+  ];
+  for (const message of messages) {
+    socket.emit("message", Buffer.from(encodeProtocolMessage(message)), false);
+  }
+  await vi.waitFor(() =>
+    expect(sent).toContainEqual(
+      expect.objectContaining({ type: "stream-opened" }),
+    ),
+  );
+  socket.emit(
+    "message",
+    Buffer.from(
+      encodeProtocolMessage({
+        type: "stream-message",
+        streamId: "stream-1",
+        message: "private-content",
+      }),
+    ),
+    false,
+  );
+  await vi.waitFor(() =>
+    expect(sent).toContainEqual(
+      expect.objectContaining({ type: "stream-output" }),
+    ),
+  );
+  socket.emit("close", 1000, Buffer.alloc(0));
+  await vi.waitFor(() => {
+    expect(log.mock.calls.map(([entry]) => entry.event)).toEqual(
+      expect.arrayContaining(["closed", "unsubscribed"]),
+    );
+  });
+
+  const entries = log.mock.calls.map(([entry]) => entry);
+  for (const event of [
+    "handled",
+    "operation-start",
+    "operation-complete",
+    "http-request",
+  ]) {
+    expect(entries).toContainEqual(
+      expect.objectContaining({ event, correlationId: "transport-1" }),
+    );
+  }
+  expect(entries).toContainEqual(
+    expect.objectContaining({
+      event: "handled",
+      details: expect.objectContaining({
+        worker: "resources/operations",
+        capabilityKind: "operation",
+        registeredName: "log",
+        handler: "handle",
+      }),
+    }),
+  );
+  const identities = [
+    {
+      events: ["read-value"],
+      correlationId: "read-1",
+      capabilityKind: "resource",
+      registeredName: "count",
+      handler: "read",
+      worker: "resources/operations",
+    },
+    {
+      events: ["subscribed", "unsubscribed"],
+      correlationId: "subscribe-1",
+      capabilityKind: "resource",
+      registeredName: "count",
+      handler: "subscribe",
+      worker: "resources/operations",
+      subscriptionId: "subscription-1",
+    },
+    {
+      events: ["opened", "received", "closed"],
+      correlationId: "open-1",
+      capabilityKind: "stream",
+      registeredName: "events",
+      handler: "open",
+      worker: "stream:events",
+      streamId: "stream-1",
+    },
+  ];
+  for (const { events, correlationId, ...details } of identities) {
+    for (const event of events) {
+      expect(entries).toContainEqual(
+        expect.objectContaining({
+          event,
+          correlationId,
+          details: expect.objectContaining({
+            ...details,
+            connectionId: "transport-1",
+          }),
+        }),
+      );
+    }
+  }
+  for (const event of ["closed", "unsubscribed"]) {
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event,
+        details: expect.objectContaining({ data: { aborted: true } }),
+      }),
+    );
+  }
+  expect(JSON.stringify(entries)).not.toContain("private-content");
+  expect(JSON.stringify(entries)).not.toContain("not-automatically-logged");
+});
+
+test("worker metadata and manifests honor configured levels and logger override precedence", async () => {
+  const directory = await createLoggingProject("warn");
+  const { config } = await loadWorkerConfig({
+    configPath: join(directory, "overmux.config.ts"),
+    aliases,
+  });
+  expect(config.logLevel).toBe("warn");
+  expect((await start(directory)).manifest.logLevel).toBe("warn");
+  const log = vi.fn<ServerLogger["log"]>();
+  const runtime = await start(directory, {
+    serverLogger: { logLevel: "info", id: () => "unused", log },
+  });
+  expect(runtime.manifest.logLevel).toBe("info");
+  await runtime.getOperation("log")!.execute("normal");
+  const session = await runtime.getStream("events")!.open(undefined, vi.fn());
+  await session.send("private");
+  await session.dispose();
+  expect(log.mock.calls.map(([entry]) => entry.event)).toEqual([
+    "handled",
+    "operation-warn",
+    "opened",
+    "closed",
+  ]);
+});
+
+test("worker logging serialization and sink failures preserve user work and cleanup", async () => {
+  const log = vi.fn<ServerLogger["log"]>(() => {
+    throw new Error("sink unavailable");
+  });
+  const runtime = await start(await createLoggingProject(), {
+    serverLogger: { logLevel: "info", id: () => "unused", log },
+  });
+  const unsubscribe = await runtime
+    .getResource("count")!
+    .subscribe(undefined, vi.fn());
+  const session = await runtime.getStream("events")!.open(undefined, vi.fn());
+  await expect(runtime.getOperation("log")!.execute("failures")).resolves.toBe(
+    "not-automatically-logged",
+  );
+  await session.send("private");
+  await unsubscribe();
+  await session.dispose();
+  await expect(runtime.getResource("count")!.read(undefined)).resolves.toBe(1);
+  const entries = log.mock.calls.map(([entry]) => entry);
+  expect(entries).toContainEqual(
+    expect.objectContaining({
+      event: "log-serialization-error",
+      level: "error",
+    }),
+  );
+  expect(entries).toContainEqual(
+    expect.objectContaining({
+      event: "noncloneable",
+      details: expect.objectContaining({ data: { value: 42 } }),
+    }),
+  );
+  expect(entries.map(({ event }) => event)).toEqual(
+    expect.arrayContaining(["unsubscribed", "closed"]),
+  );
+  expect(entries.map(({ event }) => event)).not.toContain("oversized");
+});
+
+testCases.each(["count-flood", "byte-flood"])(
+  "worker logging %s stays bounded without starving replies or close controls",
+  async (mode) => {
+    const packets = captureTransport();
+    const runtime = await start(await createLoggingProject(), {
+      serverLogger: {
+        logLevel: "info",
+        id: () => "unused",
+        log: () => undefined,
+      },
+    });
+    const unsubscribe = await runtime
+      .getResource("count")!
+      .subscribe(undefined, vi.fn());
+    const session = await runtime.getStream("events")!.open(undefined, vi.fn());
+    packets.splice(0);
+    await expect(runtime.getOperation("log")!.execute(mode)).resolves.toBe(
+      "not-automatically-logged",
+    );
+    const logs = packets.filter(({ kind }) => kind === "log");
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.length).toBeLessThanOrEqual(workerLimits.logCount);
+    expect(
+      logs.reduce((bytes, packet) => bytes + packet.bytes, 0),
+    ).toBeLessThanOrEqual(workerLimits.logBytes);
+    await unsubscribe();
+    await session.dispose();
+    await expect(runtime.getResource("count")!.read(undefined)).resolves.toBe(
+      1,
+    );
+    expect(packets.filter(({ kind }) => kind === "closed")).toHaveLength(2);
+  },
+);
 
 test("original definitions share resource/operation state and isolate named streams", async () => {
   const directory = await createProject(`
@@ -348,7 +614,7 @@ test("handlers run in their owner, identity and operation validation survive the
   });
   expect(await status(runtime)).toMatchObject({
     isMainThread: false,
-    contextKeys: ["emit", "fail", "instance", "signal"],
+    contextKeys: ["emit", "fail", "instance", "logger", "signal"],
     instanceId: "worker-test-12345",
     deepLinkPrefix: "overmux://worker-test-12345",
   });

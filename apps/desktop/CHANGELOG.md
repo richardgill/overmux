@@ -1,5 +1,13 @@
 # @overmux/desktop
 
+## 0.0.9
+
+### Patch Changes
+
+- [#42](https://github.com/richardgill/overmux/pull/42) [`910ca21`](https://github.com/richardgill/overmux/commit/910ca216beeedeb7326baad6625452bb691fc801) Thanks [@richardgill](https://github.com/richardgill)! - Add a synchronous `onBeforeInputEvent` desktop configuration hook for the remote Overmux view and owned native web views, with cancellation before native-view passthrough. Document the hook and Linux Super+C/V configuration in the configuration reference.
+
+- [#41](https://github.com/richardgill/overmux/pull/41) [`b1dabac`](https://github.com/richardgill/overmux/commit/b1dabacf4014e1aa38a178a23cc71efd5ac883b2) Thanks [@richardgill](https://github.com/richardgill)! - Replace the default Electron icon with the Overmux mark in desktop packages, windows, and the macOS Dock.
+
 ## 0.0.8
 
 ### Patch Changes
