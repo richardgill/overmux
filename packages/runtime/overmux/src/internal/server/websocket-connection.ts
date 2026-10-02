@@ -221,6 +221,7 @@ const runOperation = (
     correlationId: identity.operationId,
     details: identity,
     event: "operation-start",
+    level: "debug",
   });
   void operation(controller.signal)
     .then(() => {
@@ -229,6 +230,7 @@ const runOperation = (
         details: identity,
         durationMs: Date.now() - startedAt,
         event: "operation-complete",
+        level: "debug",
       });
     })
     .catch((cause: unknown) => {
@@ -264,7 +266,10 @@ const readResource = (
     if (!resource) {
       throw new OperationError("not-found", "Resource not found");
     }
-    const output = await resource.read(message.input, signal);
+    const output = await resource.read(message.input, signal, {
+      correlationId: message.operationId,
+      connectionId: state.connectionId,
+    });
     send(state, {
       operationId: message.operationId,
       output,
@@ -309,6 +314,11 @@ const subscribeResource = (
             type: "resource-invalidated",
           }),
         signal,
+        {
+          correlationId: message.operationId,
+          connectionId: state.connectionId,
+          subscriptionId: message.subscriptionId,
+        },
       );
       // While setup awaits, the client can unsubscribe and reuse this ID.
       // Compare entry identity so late setup cannot attach to its replacement.
@@ -401,6 +411,11 @@ const openStream = (
             },
           );
         },
+        {
+          correlationId: message.operationId,
+          connectionId: state.connectionId,
+          streamId: message.streamId,
+        },
       );
       send(state, {
         operationId: message.operationId,
@@ -459,7 +474,7 @@ const logClientDiagnostic = (
   state: ConnectionState,
   message: Extract<ClientProtocolMessage, { type: "client-diagnostic" }>,
 ) => {
-  if (!state.serverLogger?.enabled) {
+  if (state.serverLogger?.logLevel !== "debug") {
     return;
   }
   state.serverLogger.log({
@@ -552,6 +567,7 @@ const disposeConnection = async (state: ConnectionState) => {
   state.serverLogger?.log({
     correlationId: state.connectionId,
     event: "websocket-close",
+    level: "debug",
   });
   await disposeConnectionOperations(state, false);
 };
@@ -588,6 +604,7 @@ export const attachWebSocketConnection = ({
   serverLogger?.log({
     correlationId: state.connectionId,
     event: "websocket-open",
+    level: "debug",
   });
   socket.on("message", (data, isBinary) => handleFrame(state, data, isBinary));
   socket.once("close", (code, reason) => {
@@ -595,6 +612,7 @@ export const attachWebSocketConnection = ({
       correlationId: state.connectionId,
       details: { code, reason: reason?.toString() ?? "" },
       event: "websocket-close-event",
+      level: "debug",
     });
     void disposeConnection(state);
   });

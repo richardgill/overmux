@@ -225,7 +225,7 @@ const createApplicationServices = async ({
   });
   const runtime = await createRuntime({
     config,
-    debug: logger.enabled,
+    serverLogger: logger,
     notifications,
   });
   resources.add(runtime.dispose);
@@ -360,21 +360,17 @@ export const startApplicationServer = async ({
   onRestartRequested,
   options,
 }: StartApplicationServerOptions): Promise<ApplicationServer> => {
+  const configPath = resolve(options.configPath);
+  const { config, startup } = await loadServerSettings({ configPath, options });
   const logger = createServerLogger({
-    enabled: options.debug ?? true,
+    logLevel: startup.logLevel,
     logFile: getServerLogFile(),
   });
   const resources = createResources();
   resources.add(registerProcessErrorLogging(logger));
 
   try {
-    const configPath = resolve(options.configPath);
     logger.log({ details: { configPath }, event: "server-start" });
-    const { config, startup } = await loadServerSettings({
-      configPath,
-      options,
-    });
-    logger.setEnabled(startup.debug);
     const {
       auth,
       authOrigins,

@@ -19,36 +19,35 @@ describe("server startup options", () => {
         configPath: "/tmp/overmux/config.ts",
       }),
     ).toStrictEqual({
-      debug: true,
+      logLevel: "info",
       host: "localhost",
       port: 4242,
       watch: true,
     });
   });
 
-  it("preserves explicit debug configuration and overrides", () => {
-    const config = createConfig({ debug: false });
-
+  it("preserves explicit log levels and gives overrides precedence", () => {
+    const config = createConfig({ logLevel: "warn" });
     expect(
       resolveServerStartupOptions({
         config,
         configPath: "/tmp/overmux/config.ts",
-      }).debug,
-    ).toBe(false);
+      }).logLevel,
+    ).toBe("warn");
     expect(
       resolveServerStartupOptions({
         config,
         configPath: "/tmp/overmux/config.ts",
-        overrides: { debug: true },
-      }).debug,
-    ).toBe(true);
+        overrides: { logLevel: "debug" },
+      }).logLevel,
+    ).toBe("debug");
     expect(
       resolveServerStartupOptions({
-        config: createConfig({ debug: true }),
+        config,
         configPath: "/tmp/overmux/config.ts",
-        overrides: { debug: false },
-      }).debug,
-    ).toBe(false);
+        overrides: { logLevel: "error" },
+      }).logLevel,
+    ).toBe("error");
   });
 
   it("rejects port 0 in user configuration", () => {

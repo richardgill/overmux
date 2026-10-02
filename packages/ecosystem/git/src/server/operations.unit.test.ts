@@ -26,6 +26,12 @@ const testRoot = fileURLToPath(
 const roots: string[] = [];
 const disposers: (() => void)[] = [];
 const context = (signal = new AbortController().signal) => ({
+  logger: {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  },
   instance: {
     getInstanceId: () => "test",
     getDeepLinkPrefix: () => "overmux://test",

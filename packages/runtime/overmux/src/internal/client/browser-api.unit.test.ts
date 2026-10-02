@@ -43,9 +43,9 @@ const typeExamples = (api: OvermuxServerApi<ServerConfig>) => {
 void typeExamples;
 
 const manifest: RuntimeManifest = {
-  debug: false,
+  logLevel: "info",
   operations: ["closePane"],
-  protocolVersion: 10,
+  protocolVersion: 11,
   resources: ["workspace"],
   streams: ["terminal"],
 };

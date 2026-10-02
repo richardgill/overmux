@@ -37,6 +37,12 @@ const state: TmuxState = {
 };
 
 const context = () => ({
+  logger: {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  },
   instance: {
     getInstanceId: () => "test",
     getDeepLinkPrefix: () => "overmux://test",

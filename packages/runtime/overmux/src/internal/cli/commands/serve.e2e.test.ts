@@ -446,7 +446,7 @@ describe("serve packaged CLI", () => {
       expect(manifestResponse.status).toBe(200);
       expect(manifest).toMatchObject({
         operations: ["cliOperation"],
-        protocolVersion: 10,
+        protocolVersion: 11,
         resources: ["cliResource"],
         streams: ["cliStream"],
       });

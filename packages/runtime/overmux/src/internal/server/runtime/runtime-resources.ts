@@ -5,6 +5,12 @@ import {
   type ResourceDefinition,
   type RuntimeDisposer,
 } from "../../../public/index";
+import { randomUUID } from "node:crypto";
+import type { ServerLogger } from "../server-logger";
+import {
+  createHandlerLogger,
+  type HandlerLogCorrelation,
+} from "./handler-logger";
 import { isDeepStrictEqual } from "node:util";
 
 import {
@@ -14,11 +20,16 @@ import {
 import type { RuntimeLifecycle } from "./runtime-lifecycle";
 
 export type RuntimeResource = {
-  read: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
+  read: (
+    input: unknown,
+    signal?: AbortSignal,
+    correlation?: HandlerLogCorrelation,
+  ) => Promise<unknown>;
   subscribe: (
     input: unknown,
     listener: () => void,
     signal?: AbortSignal,
+    correlation?: HandlerLogCorrelation,
   ) => Promise<RuntimeDisposer>;
 };
 
@@ -29,7 +40,7 @@ export type RuntimeResourceDefinitions = Readonly<
 export type RuntimeHandlerContext = HandlerContext<Record<string, unknown>>;
 
 export type RuntimeResources = {
-  context: (signal?: AbortSignal) => RuntimeHandlerContext;
+  context: (signal?: AbortSignal) => Omit<RuntimeHandlerContext, "logger">;
   get: (name: string) => RuntimeResource | undefined;
   invalidate: RuntimeHandlerContext["invalidate"];
   names: readonly string[];
@@ -45,6 +56,7 @@ type CreateRuntimeResourcesOptions = {
   definitions: RuntimeResourceDefinitions;
   instance: HandlerContext["instance"];
   lifecycle: RuntimeLifecycle;
+  serverLogger?: ServerLogger;
 };
 
 const createSubscriptionLifetime = ({
@@ -96,6 +108,7 @@ export const createRuntimeResources = ({
   definitions,
   instance,
   lifecycle,
+  serverLogger,
 }: CreateRuntimeResourcesOptions): RuntimeResources => {
   const graph = createResourceDependencyGraph(definitions);
   const invalidationListeners = new Set<InvalidationListener>();
@@ -130,7 +143,7 @@ export const createRuntimeResources = ({
     invalidateResource(resourceId, parsedInput, input === undefined);
   };
 
-  const context = (signal?: AbortSignal): RuntimeHandlerContext => ({
+  const context: RuntimeResources["context"] = (signal) => ({
     instance,
     invalidate,
     signal: lifecycle.requestSignal(signal),
@@ -140,6 +153,7 @@ export const createRuntimeResources = ({
     id: string,
     rawInput: unknown,
     signal?: AbortSignal,
+    correlation: HandlerLogCorrelation = { correlationId: randomUUID() },
   ): Promise<unknown> => {
     const definition = definitions[id]!;
     const operationSignal = lifecycle.requestSignal(signal);
@@ -154,12 +168,21 @@ export const createRuntimeResources = ({
                   definition.dependencies as Readonly<Record<string, string>>,
                 ).map(async ([name, dependencyId]) => [
                   name,
-                  await read(dependencyId, rawInput, signal),
+                  await read(dependencyId, rawInput, signal, correlation),
                 ]),
               ),
             ),
           )
-        : await definition.read(input, context(signal));
+        : await definition.read(input, {
+            ...context(signal),
+            logger: createHandlerLogger({
+              serverLogger,
+              correlation,
+              capabilityKind: "resource",
+              registeredName: id,
+              handler: "read",
+            }),
+          });
     operationSignal.throwIfAborted();
     return definition.contract.output.parse(rawOutput);
   };
@@ -170,6 +193,7 @@ export const createRuntimeResources = ({
     signal: AbortSignal,
     activated: Set<string>,
     disposers: RuntimeDisposer[],
+    correlation: HandlerLogCorrelation,
   ): Promise<void> => {
     signal.throwIfAborted();
     if (activated.has(id)) {
@@ -186,7 +210,16 @@ export const createRuntimeResources = ({
             invalidateResource(id, input);
           }
         },
-        context(signal),
+        {
+          ...context(signal),
+          logger: createHandlerLogger({
+            serverLogger,
+            correlation,
+            capabilityKind: "resource",
+            registeredName: id,
+            handler: "subscribe",
+          }),
+        },
       );
       if (typeof dispose !== "function") {
         throw new Error(`Resource ${id} subscribe must return a disposer`);
@@ -208,6 +241,7 @@ export const createRuntimeResources = ({
           signal,
           activated,
           disposers,
+          correlation,
         );
       }
     }
@@ -215,8 +249,14 @@ export const createRuntimeResources = ({
 
   Object.keys(definitions).forEach((name) => {
     resources.set(name, {
-      read: (input, signal) => read(name, input, signal),
-      subscribe: async (rawInput, listener, signal) => {
+      read: (input, signal, correlation) =>
+        read(name, input, signal, correlation),
+      subscribe: async (
+        rawInput,
+        listener,
+        signal,
+        correlation = { correlationId: randomUUID() },
+      ) => {
         lifecycle.requestSignal(signal).throwIfAborted();
         const input = definitions[name]!.contract.input.parse(rawInput);
         const subscription = createSubscriptionLifetime({
@@ -232,6 +272,7 @@ export const createRuntimeResources = ({
             subscription.signal,
             new Set(),
             subscription.disposers,
+            correlation,
           );
           subscription.signal.throwIfAborted();
           // Refresh only this subscriber to cover changes during setup. Returning

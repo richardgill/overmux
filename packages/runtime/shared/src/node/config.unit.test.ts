@@ -71,6 +71,34 @@ test("loads app-relative and workspace TypeScript paths through a symlinked root
   });
 });
 
+testCases.each(["debug", "info", "warn", "error"])(
+  "accepts logLevel %s",
+  (logLevel) => {
+    expect(
+      configDefinitionRuntimeSchema.parse({
+        auth: { mode: "cli-login" },
+        server: { resources: {} },
+        logLevel,
+      }).logLevel,
+    ).toBe(logLevel);
+  },
+);
+
+testCases.each([
+  { logLevel: "verbose" },
+  { logLevel: true },
+  { debug: true },
+  { debug: false },
+])("rejects invalid or removed logging configuration %j", (logging) => {
+  expect(() =>
+    configDefinitionRuntimeSchema.parse({
+      auth: { mode: "cli-login" },
+      server: { resources: {} },
+      ...logging,
+    }),
+  ).toThrow();
+});
+
 const configWithSessionLifetime = (sessionLifetime: string) => ({
   auth: { mode: "cli-login", sessionLifetime },
   server: { resources: {} },

@@ -14,6 +14,7 @@ import {
   techStackRecommendationsSnippet,
   type AiContextSnippetDefinition,
   type ContractInputArguments,
+  type HandlerLogger,
   type OperationContext,
   type OvermuxServerOperations,
   type OvermuxServerResources,
@@ -58,6 +59,7 @@ const createConfig = () =>
         input: noInputSchema,
         output: z.object({ refreshed: z.boolean() }),
         handle: (_input, context) => {
+          expectTypeOf(context.logger).toEqualTypeOf<HandlerLogger>();
           context.invalidate("count");
           context.invalidate("lookup", { id: "one" });
           context.invalidate("lookup", undefined);
@@ -98,6 +100,7 @@ const createConfig = () =>
         kind: "query",
         read: (input, context) => {
           expectTypeOf(input).toEqualTypeOf<{ id: number }>();
+          expectTypeOf(context.logger).toEqualTypeOf<HandlerLogger>();
           context.invalidate("count");
           // @ts-expect-error resource handlers also use the server's IDs
           context.invalidate("missing");
@@ -111,6 +114,7 @@ const createConfig = () =>
         subscribe: async (input, _invalidate, context) => {
           expectTypeOf(input).toEqualTypeOf<{ scope: string }>();
           expectTypeOf(context.signal).toEqualTypeOf<AbortSignal>();
+          expectTypeOf(context.logger).toEqualTypeOf<HandlerLogger>();
           context.invalidate("lookup", { id: input.scope });
           return async () => undefined;
         },
@@ -127,13 +131,21 @@ const createConfig = () =>
       },
     },
     streams: {
-      events: defineStreamHandler(eventsContract, (_input, { emit }) => {
-        emit({ value: "ready" });
-        return { onMessage: ({ acknowledged }) => void acknowledged };
-      }),
+      events: defineStreamHandler(
+        eventsContract,
+        (_input, { emit, logger }) => {
+          expectTypeOf(logger).toEqualTypeOf<HandlerLogger>();
+          expectTypeOf(
+            logger.debug("opened", { ready: true }),
+          ).toEqualTypeOf<void>();
+          emit({ value: "ready" });
+          return { onMessage: ({ acknowledged }) => void acknowledged };
+        },
+      ),
       invalidate: {
         contract: eventsContract,
         open: (_input, context) => {
+          expectTypeOf(context.logger).toEqualTypeOf<HandlerLogger>();
           context.invalidate("count");
           // @ts-expect-error plain streams also use registered resource IDs
           context.invalidate("missing");

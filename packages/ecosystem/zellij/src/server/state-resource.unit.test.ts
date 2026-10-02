@@ -10,6 +10,12 @@ const state: ZellijState = {
   sessions: [],
 };
 const context = (signal: AbortSignal) => ({
+  logger: {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  },
   instance: {
     getInstanceId: () => "test",
     getDeepLinkPrefix: () => "overmux://test",
