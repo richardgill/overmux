@@ -7,6 +7,7 @@ import {
 
 import { tmuxStateSchema, type TmuxState } from "../shared/state-contract";
 import type { TmuxBackend } from "./backend";
+import { observeTmuxDiagnostics } from "./diagnostics";
 
 export type TmuxStateResource = SubscriptionResourceDefinition<
   typeof noInputSchema,
@@ -28,12 +29,18 @@ export const tmuxResource = ({
       return backend.state();
     }
     if (!initialization) {
+      const releaseLogger = observeTmuxDiagnostics(
+        backend,
+        context.logger,
+        context.signal,
+      );
       initialization = backend.refresh(context.signal).then((state) => {
         initialized = true;
         return state;
       });
       void initialization
         .finally(() => {
+          releaseLogger();
           initialization = undefined;
         })
         .catch(() => undefined);
@@ -51,12 +58,18 @@ export const tmuxResource = ({
       if (context.signal.aborted) {
         return () => undefined;
       }
+      const releaseLogger = observeTmuxDiagnostics(
+        backend,
+        context.logger,
+        context.signal,
+      );
       let disposed = false;
       const dispose = () => {
         if (disposed) {
           return;
         }
         disposed = true;
+        releaseLogger();
         context.signal.removeEventListener("abort", dispose);
         subscribers.delete(invalidate);
         if (!subscribers.size) {
