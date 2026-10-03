@@ -18,6 +18,7 @@
 // Failed reads publish an empty, disconnected state.
 // Cancelled reads leave the existing snapshot unchanged.
 import { z } from "zod";
+import type { HandlerLogger } from "overmux";
 
 import {
   isTmuxPaneId,
@@ -273,7 +274,10 @@ export const defineTmuxControlBackend = (
 ): TmuxBackend => {
   const { controlClientFactory, ...schemaInput } = rawOptions;
   const options = optionsSchema.parse(schemaInput);
+  // Use one live handler as the reporting destination, not as the command's originating identity.
+  const diagnosticLoggers = new Map<object, HandlerLogger>();
   const client = (controlClientFactory ?? createTmuxControlClient)({
+    diagnosticLogger: () => diagnosticLoggers.values().next().value,
     socket: options.socket,
   });
   const state: StateTracking = {
@@ -353,6 +357,13 @@ export const defineTmuxControlBackend = (
   return {
     ...(options.configPath ? { configPath: options.configPath } : {}),
     id: options.id,
+    observeDiagnostics: (logger) => {
+      const lease = {};
+      diagnosticLoggers.set(lease, logger);
+      return () => {
+        diagnosticLoggers.delete(lease);
+      };
+    },
     refresh,
     run,
     socket: options.socket,

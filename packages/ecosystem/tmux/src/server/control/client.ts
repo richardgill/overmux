@@ -7,7 +7,10 @@
 // Disconnects reject outstanding work, notify listeners, then retry with bounded
 // exponential delay. Queue and output limits bound memory; arguments bypass a shell.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import type { HandlerLogger } from "overmux";
 
+import { logTmuxDiagnostic, tmuxErrorContext } from "../diagnostics";
 import { serializeTmuxCommand } from "./serialize-command";
 import { createTmuxVersionCheck } from "./version";
 import {
@@ -21,9 +24,10 @@ import { tmuxSocketArguments } from "../backend";
 export type TmuxControlProcess = Pick<
   ChildProcessWithoutNullStreams,
   "kill" | "on" | "once" | "stderr" | "stdin" | "stdout"
->;
+> & { pid?: number };
 
 export type TmuxControlClientOptions = {
+  diagnosticLogger?: () => HandlerLogger | undefined;
   maxBufferedBytes?: number;
   maxPendingCommands?: number;
   reconnectMaxDelayMs?: number;
@@ -42,7 +46,18 @@ export type TmuxControlClient = {
   subscribe: (listener: (event: TmuxControlNotification) => void) => () => void;
 };
 
+type CommandIdentity = { id: number; name: string };
+type HistoryEvent = {
+  event: string;
+  timestamp: number;
+  generation: number;
+  pid?: number;
+  queueDepth: number;
+  command?: CommandIdentity;
+};
+
 type CommandRequest = {
+  identity: CommandIdentity;
   args: readonly string[];
   reject: (cause: unknown) => void;
   removeAbortListener: () => void;
@@ -106,6 +121,48 @@ export const createTmuxControlClient = (
     timer: undefined as NodeJS.Timeout | undefined,
   };
   let closed = false;
+  let commandId = 0;
+  const connectionId = randomUUID();
+  const history: HistoryEvent[] = [];
+  let timeoutReported = false;
+  let disconnectReported = false;
+
+  const record = (event: string, command?: CommandIdentity) => {
+    history.push({
+      event,
+      command,
+      timestamp: Date.now(),
+      generation: connection.generation,
+      pid: connection.process?.pid,
+      queueDepth: commands.pending.length,
+    });
+    if (history.length > 64) {
+      history.shift();
+    }
+  };
+  const report = (event: string, cause: unknown, command?: CommandIdentity) => {
+    let logger: HandlerLogger | undefined;
+    try {
+      logger = options.diagnosticLogger?.();
+    } catch {
+      // A custom logger lookup is also best effort, just like the sink itself.
+      return false;
+    }
+    if (!logger) {
+      return false;
+    }
+    logTmuxDiagnostic(logger, "warn", `tmux.control.${event}`, {
+      connectionId,
+      generation: connection.generation,
+      pid: connection.process?.pid,
+      active: commands.active?.identity,
+      command,
+      queueDepth: commands.pending.length,
+      history: [...history],
+      ...tmuxErrorContext(cause),
+    });
+    return true;
+  };
 
   const rejectAllCommands = (cause: unknown) => {
     const queued = [
@@ -148,6 +205,7 @@ export const createTmuxControlClient = (
     connection.bufferedBytes = 0;
     try {
       const serialized = serializeTmuxCommand(commands.active.args);
+      record("written", commands.active.identity);
       connection.process.stdin.write(`${serialized}\n`);
     } catch (cause) {
       handleDisconnect(connection.generation, cause);
@@ -161,6 +219,13 @@ export const createTmuxControlClient = (
     >,
   ) => {
     const command = commands.active;
+    record(
+      event.type === "block-completed" ? "response" : "response-error",
+      command?.identity,
+    );
+    // Only an actual response makes progress; caller cancellation does not release the active slot.
+    timeoutReported = false;
+    disconnectReported = false;
     commands.active = undefined;
     connection.bufferedBytes = 0;
     if (command) {
@@ -169,9 +234,9 @@ export const createTmuxControlClient = (
         if (event.type === "block-completed") {
           command.resolve(event.output);
         } else {
-          command.reject(
-            new Error(event.output.trim() || "Tmux command failed"),
-          );
+          const cause = new Error(event.output.trim() || "Tmux command failed");
+          report("command-failed", cause, command.identity);
+          command.reject(cause);
         }
       }
     }
@@ -207,6 +272,9 @@ export const createTmuxControlClient = (
           return;
         }
         connection.ready = true;
+        record("connected");
+        timeoutReported = false;
+        disconnectReported = false;
         reconnect.attempts = 0;
         writeNextCommand();
         return;
@@ -223,6 +291,11 @@ export const createTmuxControlClient = (
     if (generation !== connection.generation || closed) {
       return;
     }
+    record("disconnected");
+    if (!disconnectReported) {
+      disconnectReported = report("disconnected", cause);
+    }
+    timeoutReported = false;
     // Advancing the generation makes late events from this process harmless.
     const child = connection.process;
     connection.generation += 1;
@@ -266,6 +339,7 @@ export const createTmuxControlClient = (
       return;
     }
     connection.process = child;
+    record("spawned");
     child.stdout.on("data", (chunk: Buffer) => {
       if (generation !== connection.generation) {
         return;
@@ -312,6 +386,7 @@ export const createTmuxControlClient = (
     }
     const generation = connection.generation + 1;
     connection.generation = generation;
+    record("connecting");
     const controller = new AbortController();
     connection.checking = controller;
     try {
@@ -336,6 +411,14 @@ export const createTmuxControlClient = (
     return new Promise<string>((resolve, reject) => {
       let request: CommandRequest;
       const abort = () => {
+        record("caller-aborted", request.identity);
+        if (
+          !timeoutReported &&
+          signal?.reason instanceof Error &&
+          signal.reason.name === "TimeoutError"
+        ) {
+          timeoutReported = report("timeout", signal.reason, request.identity);
+        }
         const index = commands.pending.indexOf(request);
         if (index >= 0) {
           commands.pending.splice(index, 1);
@@ -343,7 +426,14 @@ export const createTmuxControlClient = (
         }
         reject(signal?.reason ?? new Error("Tmux command aborted"));
       };
+      commandId += 1;
       request = {
+        identity: {
+          id: commandId,
+          name: /^[a-z][a-z0-9-]{0,63}$/.test(args[0] ?? "")
+            ? args[0]!
+            : "unknown",
+        },
         args: [...args],
         reject,
         removeAbortListener: () => signal?.removeEventListener("abort", abort),
@@ -351,6 +441,7 @@ export const createTmuxControlClient = (
         signal,
       };
       commands.pending.push(request);
+      record("queued", request.identity);
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) {
         abort();

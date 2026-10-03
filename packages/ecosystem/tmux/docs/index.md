@@ -420,6 +420,8 @@ For server-enforced input blocking, set `allowInput: false` on `tmuxStream`. `Tm
 
 Control notifications invalidate the typed state cache. Authoritative snapshots come from `list-sessions` and `list-panes`, with debounced notification refreshes and slow reconciliation while state has subscribers.
 
+Tmux diagnostics respect Overmux’s `logLevel`: failures log at `warn`, and attachment lifecycle events at `debug`.
+
 ## Direct terminal clients
 
 Each terminal owns one normal PTY-backed tmux client attached directly to a real session. Browser and physical clients share active windows, active panes, status options, and, with `geometryPolicy: "shared"`, pane geometry. Navigation reuses that same full-window client, PTY, and renderer. A pane target selects the active pane; it does not crop the display to that pane.

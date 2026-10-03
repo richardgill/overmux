@@ -74,13 +74,14 @@ export const tmuxStream = ({
   const outputChunkSize = resolveOutputChunkSize(configuredOutputChunkSize);
   return defineStreamHandler(
     tmuxTerminalContract,
-    (_input, { emit, fail, signal }) =>
+    (_input, { emit, fail, logger, signal }) =>
       createTmuxTerminalSession({
         allowInput,
         backend,
         emit,
         fail,
         geometryPolicy,
+        logger,
         outputChunkSize,
         ptyFactory,
         signal,

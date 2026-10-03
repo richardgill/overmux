@@ -18,7 +18,7 @@
 // dispose/failure cancels work, removes notification listeners, and terminates the PTY, not the tmux session.
 import { randomUUID } from "node:crypto";
 
-import type { StreamSession } from "overmux";
+import type { HandlerLogger, StreamSession } from "overmux";
 import {
   spawnPty,
   type PtyDisposable,
@@ -29,6 +29,11 @@ import { createTerminalOutputFlow } from "@overmux/terminal-stream/server";
 
 import { tmuxSocketArguments } from "../backend";
 import type { TmuxBackend } from "../backend";
+import {
+  logTmuxDiagnostic,
+  observeTmuxDiagnostics,
+  tmuxErrorContext,
+} from "../diagnostics";
 import type { TmuxControlNotification } from "../control/parser";
 import {
   tmuxTerminalInputLimit,
@@ -63,6 +68,7 @@ type TmuxTerminalSessionOptions = {
   emit: (message: TmuxTerminalServerMessage) => void;
   fail: (cause: unknown) => void;
   geometryPolicy: TmuxGeometryPolicy;
+  logger?: HandlerLogger;
   outputChunkSize: number;
   ptyFactory?: PtyFactory;
   signal: AbortSignal;
@@ -145,6 +151,11 @@ export const createTmuxTerminalSession = (
   // Production uses a native PTY; tests can inject a fake with the same observable behavior.
   const factory = options.ptyFactory ?? spawnPty;
   const backend = boundedBackend(options.backend);
+  const releaseLogger = observeTmuxDiagnostics(
+    options.backend,
+    options.logger,
+    options.signal,
+  );
   // Either the owning stream or an internal failure can cancel every pending tmux operation.
   const lifecycleController = new AbortController();
   const lifecycleSignal = AbortSignal.any([
@@ -153,6 +164,18 @@ export const createTmuxTerminalSession = (
   ]);
   // Output acknowledgements include this ID so an old PTY cannot acknowledge a replacement's data.
   const terminalId = randomUUID();
+  const attachment: { readyChannel?: string; ptyPid?: number; ready: boolean } =
+    { ready: false };
+  const logAttachment = (
+    event: string,
+    level: "debug" | "warn" = "debug",
+    details?: Record<string, unknown>,
+  ) =>
+    logTmuxDiagnostic(options.logger, level, `tmux.attachment.${event}`, {
+      terminalId,
+      ...attachment,
+      ...details,
+    });
   // The cached promise makes disposal idempotent when disconnect and failure happen together.
   const lifecycle: { disposal?: Promise<void>; disposed: boolean } = {
     disposed: false,
@@ -205,6 +228,8 @@ export const createTmuxTerminalSession = (
   };
   // Cancels work, removes tmux and PTY listeners, and waits for the PTY to terminate.
   const shutDown = async () => {
+    logAttachment(attachment.ready ? "disposed" : "disposed-before-ready");
+    releaseLogger();
     lifecycle.disposed = true;
     selection.requested = undefined;
     lifecycleController.abort(new Error("Terminal session disposed"));
@@ -232,6 +257,7 @@ export const createTmuxTerminalSession = (
     if (lifecycle.disposed || options.signal.aborted) {
       return;
     }
+    logAttachment("failed", "warn", tmuxErrorContext(cause));
     void dispose().finally(() => options.fail(cause));
   };
 
@@ -254,10 +280,19 @@ export const createTmuxTerminalSession = (
     geometry: TerminalSize,
   ) => {
     const readyChannel = `overmux-ready-${randomUUID()}`;
+    attachment.readyChannel = readyChannel;
+    logAttachment("started");
     // The tmux client signals after attach so its native client name can be read safely.
-    const attached = backend.run(["wait-for", readyChannel], lifecycleSignal);
+    const attached = backend
+      .run(["wait-for", readyChannel], lifecycleSignal)
+      .then((response) => {
+        // Control mode's %end for wait-for is not proof that its native queue was signalled.
+        logAttachment("wait-for-response");
+        return response;
+      });
     let spawned: PtyProcess;
     try {
+      logAttachment("pty-launch");
       spawned = factory({
         args: tmuxAttachArguments({
           // Navigation can attach before a renderer exists, so 80x24 is only a placeholder.
@@ -275,11 +310,14 @@ export const createTmuxTerminalSession = (
         rows: geometry.rows,
       });
     } catch (cause) {
+      logAttachment("pty-launch-failed", "warn", tmuxErrorContext(cause));
       lifecycleController.abort(cause);
       await attached.catch(() => undefined);
       throw cause;
     }
     terminal.process = spawned;
+    attachment.ptyPid = spawned.pid;
+    logAttachment("pty-started");
     terminal.exited = new Promise((resolve) => {
       terminal.dataSubscription = spawned.onData((data) => {
         if (!lifecycle.disposed) {
@@ -287,6 +325,7 @@ export const createTmuxTerminalSession = (
         }
       });
       terminal.exitSubscription = spawned.onExit(({ exitCode, signal }) => {
+        logAttachment("pty-exit", "debug", { exitCode, signal });
         if (terminal.process === spawned) {
           terminal.process = undefined;
         }
@@ -456,6 +495,8 @@ export const createTmuxTerminalSession = (
     // wait-for runs after attach-session in the same native command queue. Its signal and
     // stored client name establish readiness; the final location query confirms selection.
     terminal.clientName = attachedClientName;
+    attachment.ready = true;
+    logAttachment("ready");
     // A resize can arrive while tmux is attaching, so finish with the latest geometry.
     if (selection.geometry) {
       applyTerminalGeometry(selection.geometry);
@@ -539,6 +580,7 @@ export const createTmuxTerminalSession = (
       if (!isCurrent() || lifecycle.disposed) {
         return;
       }
+      logAttachment("selection-failed", "warn", tmuxErrorContext(cause));
       // Invalid or vanished targets reject only this request, not the reusable terminal.
       // Never send keys queued for a failed destination to the old session.
       selection.requested = undefined;
