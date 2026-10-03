@@ -1,3 +1,5 @@
+import type { HandlerLogger } from "overmux";
+
 import type {
   TmuxPane,
   TmuxSession,
@@ -14,6 +16,8 @@ export type TmuxBackend = {
   socket: string;
   configPath?: string;
   run: (args: readonly string[], signal?: AbortSignal) => Promise<string>;
+  // Optional for custom backends without control diagnostics. Release when the handler ends.
+  observeDiagnostics?: (logger: HandlerLogger) => () => void;
   state: () => TmuxState;
   refresh: (signal?: AbortSignal) => Promise<TmuxState>;
   subscribe: (listener: () => void) => () => void;

@@ -7,6 +7,7 @@ import {
 
 import { tmuxStateSchema } from "../shared/state-contract";
 import type { TmuxBackend } from "./backend";
+import { observeTmuxDiagnostics } from "./diagnostics";
 
 export type TmuxStateResource = SubscriptionResourceDefinition<
   typeof noInputSchema,
@@ -23,8 +24,18 @@ export const tmuxResource = ({
 
   // The stream has its own backend, and tmux may also change without any UI subscriber.
   // Refresh explicit reads rather than trusting an unobserved worker-local cache.
-  const read = (_input: void, context: HandlerContext) =>
-    backend.refresh(context.signal);
+  const read = async (_input: void, context: HandlerContext) => {
+    const releaseLogger = observeTmuxDiagnostics(
+      backend,
+      context.logger,
+      context.signal,
+    );
+    try {
+      return await backend.refresh(context.signal);
+    } finally {
+      releaseLogger();
+    }
+  };
   return {
     contract: defineResourceContract({
       input: noInputSchema,
@@ -36,12 +47,18 @@ export const tmuxResource = ({
       if (context.signal.aborted) {
         return () => undefined;
       }
+      const releaseLogger = observeTmuxDiagnostics(
+        backend,
+        context.logger,
+        context.signal,
+      );
       let disposed = false;
       const dispose = () => {
         if (disposed) {
           return;
         }
         disposed = true;
+        releaseLogger();
         context.signal.removeEventListener("abort", dispose);
         subscribers.delete(invalidate);
         if (!subscribers.size) {

@@ -68,16 +68,18 @@ describe("tmux terminal stream", () => {
     const openedSession = stream.open(undefined, context);
 
     expect(openedSession).toBe(session);
-    expect(sessionMocks.createTmuxTerminalSession).toHaveBeenCalledWith({
-      allowInput: false,
-      backend: terminalStreamOptions.backend,
-      emit: context.emit,
-      fail: context.fail,
-      geometryPolicy: "ignore-size",
-      outputChunkSize: 1_024,
-      ptyFactory,
-      signal: context.signal,
-    });
+    expect(sessionMocks.createTmuxTerminalSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowInput: false,
+        backend: terminalStreamOptions.backend,
+        emit: context.emit,
+        fail: context.fail,
+        geometryPolicy: "ignore-size",
+        outputChunkSize: 1_024,
+        ptyFactory,
+        signal: context.signal,
+      }),
+    );
   });
 
   it("uses the standard interactive defaults", () => {

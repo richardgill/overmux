@@ -88,7 +88,9 @@ describe("tmux control backend", () => {
 
     expect(backend.id).toBe("default");
     expect(backend.socket).toBe("default");
-    expect(controlClientFactory).toHaveBeenCalledWith({ socket: "default" });
+    expect(controlClientFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ socket: "default" }),
+    );
   });
 
   it("constructs typed authoritative state without shadow filtering", async () => {
