@@ -1,5 +1,12 @@
 # @overmux/git
 
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [[`b392280`](https://github.com/richardgill/overmux/commit/b3922800cfe31ca3d85c76fa3d364d146d96df88)]:
+  - overmux@0.0.12
+
 ## 0.0.11
 
 ### Patch Changes
