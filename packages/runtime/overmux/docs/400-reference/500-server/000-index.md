@@ -11,3 +11,7 @@ Overmux's server architecture provides three primitives that package authors can
 - [Streams](./300-streams.md): Provide low-latency, bidirectional data flow between your UI and server, such as terminal input/output or live AI agent output.
 
 See [Notifications](./400-notifications.md) for sending notifications and [Server API](./500-api.md) for definition helpers and handler context.
+
+## Execution model
+
+Overmux uses workers, which are separate JavaScript threads. Resources and operations share one worker, while each named stream has its own. This keeps resource and operation work from blocking streams, helping streams stay responsive.
