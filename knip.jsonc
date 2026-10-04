@@ -51,6 +51,9 @@
       ],
     },
     "packages/runtime/overmux": {
+      "paths": {
+        "#worker-entry": ["./src/internal/server/worker-entry.ts"],
+      },
       "entry": [
         "src/internal/client/auth/entry.tsx",
         "src/internal/server/worker-entry.ts",
