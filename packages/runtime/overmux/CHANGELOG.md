@@ -1,5 +1,17 @@
 # overmux
 
+## 0.0.12
+
+### Patch Changes
+
+- [#43](https://github.com/richardgill/overmux/pull/43) [`b392280`](https://github.com/richardgill/overmux/commit/b3922800cfe31ca3d85c76fa3d364d146d96df88) Thanks [@richardgill](https://github.com/richardgill)! - Add structured `context.logger` logging to resource, stream, and operation handlers, with automatic capability and request/session correlation and safe cleanup logging.
+
+  Replace the top-level `debug` boolean with `logLevel: "debug" | "info" | "warn" | "error"`, defaulting to `"info"` in development and production. Runtime and handler events use the same severity threshold with no lifecycle exceptions; browser console forwarding is enabled only at `"debug"`. Remove `debug` from existing configuration and use `logLevel: "debug"` when investigating. The runtime protocol version increases to reject older browser manifests.
+
+- [#46](https://github.com/richardgill/overmux/pull/46) [`053f7b6`](https://github.com/richardgill/overmux/commit/053f7b6cf03050e6499905fc9d71bdf5a9894fde) Thanks [@richardgill](https://github.com/richardgill)! - Isolate each named stream from the shared resource/operation worker. Query, subscription, and derived resources continue to run together with operations; each named stream has its own worker.
+
+  Remove `context.invalidate` from stream handlers. Resource and operation contexts retain invalidation. Use an operation to mutate data and invalidate resources, or a subscription resource watcher to refresh clients when an external source changes.
+
 ## 0.0.11
 
 ### Patch Changes

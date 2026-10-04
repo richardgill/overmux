@@ -1,5 +1,17 @@
 # @overmux/tmux
 
+## 0.0.13
+
+### Patch Changes
+
+- [#45](https://github.com/richardgill/overmux/pull/45) [`962d5aa`](https://github.com/richardgill/overmux/commit/962d5aa0f5443adc259744f8a9d04bdef6bdd460) Thanks [@richardgill](https://github.com/richardgill)! - Add bounded control-command history and correlated terminal attachment diagnostics through Overmux handler logging, without changing tmux lifecycle or recovery behavior.
+
+- [#46](https://github.com/richardgill/overmux/pull/46) [`053f7b6`](https://github.com/richardgill/overmux/commit/053f7b6cf03050e6499905fc9d71bdf5a9894fde) Thanks [@richardgill](https://github.com/richardgill)! - Refresh explicit tmux state reads and avoid refreshing hierarchy state for stream-only notification listeners.
+
+- Updated dependencies [[`b392280`](https://github.com/richardgill/overmux/commit/b3922800cfe31ca3d85c76fa3d364d146d96df88), [`053f7b6`](https://github.com/richardgill/overmux/commit/053f7b6cf03050e6499905fc9d71bdf5a9894fde)]:
+  - overmux@0.0.12
+  - @overmux/xterm@0.0.12
+
 ## 0.0.12
 
 ### Patch Changes
