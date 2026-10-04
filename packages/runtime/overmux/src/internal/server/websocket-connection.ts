@@ -18,10 +18,9 @@ import {
 import type { Runtime } from "./runtime/create-runtime";
 import type { RuntimeStreamSession } from "./runtime/runtime-streams";
 import { maxWebSocketBufferedBytes } from "./websocket-limits";
+import { ProtocolError, type ProtocolErrorCode } from "./protocol-error";
 
 const maxPendingStreamOutputBytes = 1_048_576;
-
-type ErrorCode = "bad-request" | "conflict" | "internal" | "not-found";
 
 type SubscriptionEntry = {
   controller: AbortController;
@@ -50,15 +49,6 @@ type ConnectionState = {
   streams: Map<string, StreamEntry>;
   subscriptions: Map<string, SubscriptionEntry>;
 };
-
-class OperationError extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 const bytesOf = (data: RawData) => {
   if (Array.isArray(data)) {
@@ -89,8 +79,10 @@ const operationIdOf = (value: unknown) => {
     : undefined;
 };
 
-const errorDetails = (cause: unknown): { code: ErrorCode; message: string } => {
-  if (cause instanceof OperationError) {
+const errorDetails = (
+  cause: unknown,
+): { code: ProtocolErrorCode; message: string } => {
+  if (cause instanceof ProtocolError) {
     return { code: cause.code, message: cause.message };
   }
   if (cause instanceof ZodError || cause instanceof SyntaxError) {
@@ -148,6 +140,17 @@ const sendError = (
   send(state, { ...error, operationId, type: "error" });
 };
 
+// A released client ID may already name a new lifetime, even before its next frame
+// reaches main. Cleanup failures are server diagnostics, never late ID-addressed errors.
+const reportCleanupFailure = (state: ConnectionState, cause: unknown) => {
+  state.serverLogger?.log({
+    correlationId: state.connectionId,
+    details: diagnosticErrorDetails(cause),
+    event: "protocol-cleanup-error",
+    level: "error",
+  });
+};
+
 const disposeSubscription = async (
   state: ConnectionState,
   subscriptionId: string,
@@ -175,10 +178,12 @@ const disposeStream = async (
   }
   state.streams.delete(streamId);
   entry.controller.abort(new Error("Stream closed"));
-  await entry.session?.dispose();
+  // A close acknowledgement belongs to this ID's current lifetime. Send before
+  // awaiting user cleanup, so a later completion cannot close a reused ID.
   if (notify) {
     send(state, { streamId, type: "stream-closed" });
   }
+  await entry.session?.dispose();
 };
 
 const disposeConnectionOperations = async (
@@ -208,7 +213,7 @@ const runOperation = (
   if (state.operations.has(identity.operationId)) {
     sendError(
       state,
-      new OperationError("conflict", "Operation ID is already active"),
+      new ProtocolError("conflict", "Operation ID is already active"),
       identity.operationId,
       identity,
     );
@@ -264,7 +269,7 @@ const readResource = (
   };
   runOperation(state, identity, async (signal) => {
     if (!resource) {
-      throw new OperationError("not-found", "Resource not found");
+      throw new ProtocolError("not-found", "Resource not found");
     }
     const output = await resource.read(message.input, signal, {
       correlationId: message.operationId,
@@ -291,7 +296,7 @@ const subscribeResource = (
   if (state.subscriptions.has(message.subscriptionId)) {
     sendError(
       state,
-      new OperationError("conflict", "Subscription ID is already active"),
+      new ProtocolError("conflict", "Subscription ID is already active"),
       message.operationId,
       identity,
     );
@@ -299,7 +304,7 @@ const subscribeResource = (
   }
   runOperation(state, identity, async (operationSignal) => {
     if (!resource) {
-      throw new OperationError("not-found", "Resource not found");
+      throw new ProtocolError("not-found", "Resource not found");
     }
     const controller = new AbortController();
     const entry: SubscriptionEntry = { controller };
@@ -308,12 +313,32 @@ const subscribeResource = (
     try {
       const dispose = await resource.subscribe(
         message.input,
-        () =>
-          void send(state, {
+        () => {
+          if (
+            signal.aborted ||
+            state.subscriptions.get(message.subscriptionId) !== entry
+          ) {
+            return;
+          }
+          send(state, {
             subscriptionId: message.subscriptionId,
             type: "resource-invalidated",
-          }),
+          });
+        },
         signal,
+        (cause) => {
+          if (
+            signal.aborted ||
+            state.subscriptions.get(message.subscriptionId) !== entry
+          ) {
+            return;
+          }
+          sendError(state, cause, message.subscriptionId, identity);
+          void disposeSubscription(state, message.subscriptionId).catch(
+            (disposeCause: unknown) =>
+              sendError(state, disposeCause, message.subscriptionId, identity),
+          );
+        },
         {
           correlationId: message.operationId,
           connectionId: state.connectionId,
@@ -365,7 +390,7 @@ const openStream = (
   if (state.streams.has(message.streamId)) {
     sendError(
       state,
-      new OperationError("conflict", "Stream ID is already active"),
+      new ProtocolError("conflict", "Stream ID is already active"),
       message.operationId,
       identity,
     );
@@ -373,7 +398,7 @@ const openStream = (
   }
   runOperation(state, identity, async (operationSignal) => {
     if (!stream) {
-      throw new OperationError("not-found", "Stream not found");
+      throw new ProtocolError("not-found", "Stream not found");
     }
     const controller = new AbortController();
     const entry: StreamEntry = { controller, identity };
@@ -381,10 +406,14 @@ const openStream = (
     const pending: unknown[] = [];
     let pendingBytes = 0;
     let opened = false;
+    const signal = AbortSignal.any([operationSignal, controller.signal]);
     try {
-      entry.session = await stream.open(
+      const session = await stream.open(
         message.input,
         (output) => {
+          if (signal.aborted || state.streams.get(message.streamId) !== entry) {
+            return;
+          }
           if (opened) {
             const sent = send(state, {
               message: output,
@@ -402,12 +431,15 @@ const openStream = (
           }
           pending.push(output);
         },
-        AbortSignal.any([operationSignal, controller.signal]),
+        signal,
         (cause) => {
+          if (signal.aborted || state.streams.get(message.streamId) !== entry) {
+            return;
+          }
           sendError(state, cause, message.streamId, identity);
           void disposeStream(state, message.streamId).catch(
             (disposeCause: unknown) => {
-              sendError(state, disposeCause, message.streamId, identity);
+              reportCleanupFailure(state, disposeCause);
             },
           );
         },
@@ -417,6 +449,12 @@ const openStream = (
           streamId: message.streamId,
         },
       );
+      // A late setup cannot attach to an ID the client closed and reused.
+      if (signal.aborted || state.streams.get(message.streamId) !== entry) {
+        await session.dispose();
+        return;
+      }
+      entry.session = session;
       send(state, {
         operationId: message.operationId,
         streamId: message.streamId,
@@ -435,6 +473,9 @@ const openStream = (
         }
       }
     } catch (cause) {
+      if (signal.aborted || state.streams.get(message.streamId) !== entry) {
+        return;
+      }
       await disposeStream(state, message.streamId, false);
       throw cause;
     }
@@ -454,17 +495,23 @@ const sendStreamMessage = (
   if (!entry?.session) {
     sendError(
       state,
-      new OperationError("not-found", "Stream not found"),
+      new ProtocolError("not-found", "Stream not found"),
       message.streamId,
       identity,
     );
     return;
   }
   void entry.session.send(message.message).catch((cause: unknown) => {
+    if (
+      entry.controller.signal.aborted ||
+      state.streams.get(message.streamId) !== entry
+    ) {
+      return;
+    }
     sendError(state, cause, message.streamId, identity);
     void disposeStream(state, message.streamId).catch(
       (disposeCause: unknown) => {
-        sendError(state, disposeCause, message.streamId, identity);
+        reportCleanupFailure(state, disposeCause);
       },
     );
   });
@@ -510,7 +557,7 @@ const handleMessage = (
   if (message.type === "resource-unsubscribe") {
     void disposeSubscription(state, message.subscriptionId).catch(
       (cause: unknown) => {
-        sendError(state, cause, message.subscriptionId);
+        reportCleanupFailure(state, cause);
       },
     );
     return;
@@ -521,7 +568,7 @@ const handleMessage = (
   }
   if (message.type === "stream-close") {
     void disposeStream(state, message.streamId).catch((cause: unknown) => {
-      sendError(state, cause, message.streamId);
+      reportCleanupFailure(state, cause);
     });
     return;
   }

@@ -107,6 +107,9 @@ Derived resources compute a value from other resources.
 For example, count the entries returned by the `ls` resource above. Add `entryCount` alongside `ls` in your `resources` object:
 
 ```ts
+import { defineOvermuxServer, defineResourceContract, noInputSchema } from "overmux";
+import { z } from "zod";
+
 defineOvermuxServer({
   resources: {
     ls: {

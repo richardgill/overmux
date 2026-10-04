@@ -1,5 +1,5 @@
 import {
-  configDefinitionRuntimeSchema,
+  serverDefinitionRuntimeSchema,
   type RuntimeConfigDefinition,
 } from "@overmux/shared/node";
 import { EventEmitter } from "node:events";
@@ -22,6 +22,7 @@ import {
 import { createRuntime } from "./runtime/create-runtime";
 import type { ServerLogger } from "./server-logger";
 import { attachWebSocketConnection } from "./websocket-connection";
+import { ProtocolError } from "./protocol-error";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -73,10 +74,10 @@ const attach = async ({
   read?: CountResource["read"];
   serverLogger?: ServerLogger;
 }) => {
-  const config: RuntimeConfigDefinition = configDefinitionRuntimeSchema.parse({
-    auth: { mode: "cli-login" },
-    server: {
-      ...defineOvermuxServer({
+  const config: RuntimeConfigDefinition = {
+    auth: { mode: "cli-login", sessionLifetime: "forever" },
+    server: serverDefinitionRuntimeSchema.parse(
+      defineOvermuxServer({
         resources: {
           count: {
             contract: countContract,
@@ -85,10 +86,10 @@ const attach = async ({
             subscribe,
           },
         },
+        streams,
       }),
-      streams,
-    },
-  });
+    ),
+  };
   const runtime = await createRuntime({ config, serverLogger });
   const socket = createSocket();
   attachWebSocketConnection({
@@ -117,6 +118,47 @@ const subscription = ({
 const countContract = defineResourceContract({
   input: z.void(),
   output: z.number(),
+});
+
+const errorCases = [
+  {
+    name: "typed protocol error",
+    cause: new ProtocolError("conflict", "failed"),
+    code: "conflict",
+  },
+  {
+    name: "arbitrary protocol-like code",
+    cause: Object.assign(new Error("failed"), { code: "bad-request" }),
+    code: "internal",
+  },
+  {
+    name: "native code",
+    cause: Object.assign(new Error("failed"), { code: "ENOENT" }),
+    code: "internal",
+  },
+];
+testCases.each(errorCases)("WebSocket maps $name", async ({ cause, code }) => {
+  const { runtime, socket } = await attach({
+    subscribe: () => () => undefined,
+    read: () => {
+      throw cause;
+    },
+  });
+  send(socket, {
+    type: "resource-read",
+    resourceName: "count",
+    operationId: "read",
+  });
+  await vi.waitFor(() =>
+    expect(socket.sent).toContainEqual({
+      type: "error",
+      operationId: "read",
+      code,
+      message: "failed",
+    }),
+  );
+  socket.emit("close");
+  await runtime.dispose();
 });
 
 describe("WebSocket resource subscriptions", () => {

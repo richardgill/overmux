@@ -175,6 +175,43 @@ describe("real isolated tmux control client", () => {
     ).resolves.toBe(`${value}\n`);
   });
 
+  it("shares external tmux state across independent backends", async () => {
+    const { socket } = await createIsolatedControlClient();
+    const options = {
+      socket,
+      controlClientFactory: (options: TmuxControlClientOptions) => {
+        const client = createTmuxControlClient(options);
+        activeClients.push(client);
+        return client;
+      },
+    };
+    const application = defineTmuxControlBackend(options);
+    const terminal = defineTmuxControlBackend(options);
+    const stopState = application.subscribe(() => undefined);
+    const stopTerminal = terminal.subscribeNotifications(() => undefined);
+    await application.refresh();
+
+    await terminal.run(["rename-window", "-t", "control:0", "shared"]);
+    await vi.waitFor(() =>
+      expect(application.state().hierarchy.sessions[0]?.windows[0]?.name).toBe(
+        "shared",
+      ),
+    );
+    const { stdout } = await runTmux(socket, [
+      "list-clients",
+      "-F",
+      "#{client_control_mode}",
+    ]);
+    expect(stdout.trim().split("\n")).toEqual(["1", "1"]);
+
+    stopState();
+    await terminal.run(["rename-window", "-t", "control:0", "unobserved"]);
+    expect(
+      (await application.refresh()).hierarchy.sessions[0]?.windows[0]?.name,
+    ).toBe("unobserved");
+    stopTerminal();
+  });
+
   it("attaches in no-output, ignore-size control mode and returns output", async () => {
     const { client, socket } = await createIsolatedControlClient();
 

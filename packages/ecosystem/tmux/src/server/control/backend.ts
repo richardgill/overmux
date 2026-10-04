@@ -272,11 +272,12 @@ const paneFormat = [
 export const defineTmuxControlBackend = (
   rawOptions: TmuxControlBackendOptions = {},
 ): TmuxBackend => {
-  const { controlClientFactory, ...schemaInput } = rawOptions;
+  const { controlClientFactory = createTmuxControlClient, ...schemaInput } =
+    rawOptions;
   const options = optionsSchema.parse(schemaInput);
   // Use one live handler as the reporting destination, not as the command's originating identity.
   const diagnosticLoggers = new Map<object, HandlerLogger>();
-  const client = (controlClientFactory ?? createTmuxControlClient)({
+  const client = controlClientFactory({
     diagnosticLogger: () => diagnosticLoggers.values().next().value,
     socket: options.socket,
   });
@@ -310,6 +311,9 @@ export const defineTmuxControlBackend = (
     }
     client.subscribe((event) => {
       notifications.listeners.forEach((listener) => listener(event));
+      if (!state.listeners.size) {
+        return;
+      }
       if (notifications.refreshTimer) {
         clearTimeout(notifications.refreshTimer);
       }

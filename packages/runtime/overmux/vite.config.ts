@@ -51,6 +51,7 @@ export default defineConfig({
       entry: {
         "internal/server/coordinator/server-child":
           "src/internal/server/coordinator/server-child.ts",
+        "internal/server/worker-entry": "src/internal/server/worker-entry.ts",
       },
       format: "esm",
       outDir: "dist",

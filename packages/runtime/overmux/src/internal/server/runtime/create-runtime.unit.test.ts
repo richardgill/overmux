@@ -1,5 +1,5 @@
 import {
-  configDefinitionRuntimeSchema,
+  serverDefinitionRuntimeSchema,
   type RuntimeConfigDefinition,
 } from "@overmux/shared/node";
 
@@ -18,11 +18,10 @@ import { createRuntime, type Runtime } from "./create-runtime";
 
 const prepare = (config: RuntimeConfigDefinition) => createRuntime({ config });
 
-const parsedConfig = (server: unknown) =>
-  configDefinitionRuntimeSchema.parse({
-    auth: { mode: "cli-login" },
-    server,
-  });
+const parsedConfig = (server: unknown) => ({
+  auth: { mode: "cli-login" as const, sessionLifetime: "forever" as const },
+  server: serverDefinitionRuntimeSchema.parse(server),
+});
 
 const countContract = defineResourceContract({
   input: z.object({ value: z.number() }),
@@ -40,12 +39,7 @@ const streamById = (runtime: Runtime, id: string) => runtime.getStream(id);
 
 describe("runtime", () => {
   it("publishes the trusted runtime manifest", async () => {
-    const runtime = await prepare(
-      configDefinitionRuntimeSchema.parse({
-        auth: { mode: "cli-login" },
-        server: { resources: {} },
-      }),
-    );
+    const runtime = await prepare(parsedConfig({ resources: {} }));
 
     expect(runtime.manifest).toMatchObject({
       logLevel: "info",

@@ -2,7 +2,7 @@
   "extends": "@overmux/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "ES2024.Promise", "DOM", "DOM.Iterable"],
     "paths": {
       "#server-child": ["./src/internal/server/coordinator/server-child.ts"]
     },

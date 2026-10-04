@@ -56,6 +56,37 @@ const setup = () => {
 };
 
 describe("tmux state resource", () => {
+  it("refreshes reads even when there is no active subscriber", async () => {
+    const { backend, publish } = setup();
+    const releaseLogger = vi.fn();
+    backend.observeDiagnostics = vi.fn(() => releaseLogger);
+    const resource = tmuxResource({ backend });
+    const readContext = context();
+    await resource.read(undefined, readContext);
+    expect(backend.observeDiagnostics).toHaveBeenCalledWith(readContext.logger);
+    publish(tmuxState("changed externally"));
+    expect(
+      (await resource.read(undefined, context())).hierarchy.sessions[0]?.name,
+    ).toBe("changed externally");
+    expect(backend.refresh).toHaveBeenCalledTimes(2);
+    expect(backend.observeDiagnostics).toHaveBeenCalledTimes(2);
+    expect(releaseLogger).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the read diagnostic logger when refresh fails", async () => {
+    const { backend } = setup();
+    const releaseLogger = vi.fn();
+    backend.observeDiagnostics = vi.fn(() => releaseLogger);
+    vi.mocked(backend.refresh).mockRejectedValue(new Error("refresh failed"));
+    const resource = tmuxResource({ backend });
+
+    await expect(resource.read(undefined, context())).rejects.toThrow(
+      "refresh failed",
+    );
+
+    expect(releaseLogger).toHaveBeenCalledOnce();
+  });
+
   it("subscribes immediately and reads invalidated cached state", async () => {
     const { backend, publish } = setup();
     const resource = tmuxResource({ backend });

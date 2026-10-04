@@ -145,6 +145,12 @@ export type RuntimeConfigDefinition = z.infer<
   typeof configDefinitionRuntimeSchema
 >;
 
+// Only data crosses from config loading into the transport process.
+export type RuntimeConfigSettings = Omit<
+  RuntimeConfigDefinition,
+  "server" | "instanceId"
+>;
+
 export type ResolvedOvermuxConfigPaths = {
   logicalApplicationRoot: string;
   logicalConfigPath: string;

@@ -2,10 +2,7 @@
 // It owns config loading, transport, and the listening socket.
 
 import { serve, type ServerType as NodeServer } from "@hono/node-server";
-import {
-  loadOvermuxConfig,
-  type RuntimeConfigDefinition,
-} from "@overmux/shared/node";
+import type { RuntimeConfigSettings } from "@overmux/shared/node";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { resolve } from "node:path";
@@ -25,7 +22,11 @@ import {
 } from "./notifications/background-notification-service";
 import { createFileBackgroundNotificationStore } from "./notifications/background-notification-store";
 import { createNotificationService } from "./notifications/notification-service";
-import { createRuntime, type Runtime } from "./runtime/create-runtime";
+import type { Runtime } from "./runtime/create-runtime";
+import {
+  createWorkerRuntime,
+  loadWorkerConfig,
+} from "./runtime/worker-runtime";
 import {
   createServerLogger,
   errorDetails,
@@ -142,7 +143,7 @@ const loadServerSettings = async ({
   configPath: string;
   options: OvermuxServerOptions;
 }) => {
-  const { config } = await loadOvermuxConfig({
+  const { config } = await loadWorkerConfig({
     aliases: options.configAliases,
     configPath,
   });
@@ -177,12 +178,16 @@ const createAuthOrigins = ({
 };
 
 const createApplicationServices = async ({
+  aliases,
   config,
+  configPath,
   logger,
   resources,
   startup,
 }: {
-  config: RuntimeConfigDefinition;
+  aliases?: Record<string, string>;
+  config: RuntimeConfigSettings;
+  configPath: string;
   logger: ServerLogger;
   resources: ServerResources;
   startup: ResolvedServerStartupOptions;
@@ -223,10 +228,11 @@ const createApplicationServices = async ({
     backgroundNotifications,
     logger,
   });
-  const runtime = await createRuntime({
-    config,
+  const runtime = await createWorkerRuntime({
+    configPath,
     serverLogger: logger,
     notifications,
+    aliases,
   });
   resources.add(runtime.dispose);
   return {
@@ -292,7 +298,7 @@ const startApplicationTransport = async ({
   });
   resources.add(() => closeNodeServer(server, runtime.dispose));
   const address = await getServerAddress(server);
-  runtime.establishInstance(address.port);
+  await runtime.establishInstance(address.port);
   const urlHost = startup.host.includes(":")
     ? `[${startup.host}]`
     : startup.host;
@@ -379,7 +385,9 @@ export const startApplicationServer = async ({
       notifications,
       runtime,
     } = await createApplicationServices({
+      aliases: options.configAliases,
       config,
+      configPath,
       logger,
       resources,
       startup,

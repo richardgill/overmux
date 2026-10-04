@@ -32,6 +32,7 @@ export type {
   ResourceDefinition,
   RuntimeDisposer,
   ServerConfigDefinition,
+  StreamContext,
   StreamHandlerDefinition,
   StreamSession,
   SubscriptionResourceDefinition,

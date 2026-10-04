@@ -1,6 +1,6 @@
 import {
   serverConfigRuntimeSchema,
-  type RuntimeConfigDefinition,
+  type RuntimeConfigSettings,
 } from "@overmux/shared/node";
 import { logLevelSchema, type LogLevel } from "@overmux/shared";
 import { dirname, resolve } from "node:path";
@@ -29,7 +29,7 @@ export const resolveServerStartupOptions = ({
   configPath,
   overrides = {},
 }: {
-  config: RuntimeConfigDefinition;
+  config: RuntimeConfigSettings;
   configPath: string;
   overrides?: ServerConfigDefinition & { logLevel?: LogLevel };
 }): ResolvedServerStartupOptions => {

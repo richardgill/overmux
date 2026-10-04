@@ -5,14 +5,13 @@ import {
   webSocketCloseCode,
   type ServerProtocolMessage,
 } from "../shared/index";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import {
   createServer,
   request as requestHttp,
   type IncomingHttpHeaders,
 } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import WebSocket, { type RawData, WebSocketServer } from "ws";
@@ -26,6 +25,13 @@ type MessageReader = {
   count: (type: ServerProtocolMessage["type"]) => number;
   next: (type: ServerProtocolMessage["type"]) => Promise<ServerProtocolMessage>;
   textFrames: () => number;
+};
+
+const createDirectory = async (name: string) => {
+  const root = join(process.cwd(), ".test-tmp");
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, name));
+  return directory;
 };
 
 const bearerToken = async (server: OvermuxServer) => {
@@ -152,7 +158,7 @@ const postJson = ({
 
 describe("WebSocket server", () => {
   it("handles validated operations on the socket endpoint", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "overmux-socket-"));
+    const directory = await createDirectory("overmux-socket-");
     const configPath = join(directory, "overmux.config.ts");
     const port = await findAvailablePort();
     let server: OvermuxServer | undefined;
@@ -455,7 +461,7 @@ export default defineOvermuxConfig({
   });
 
   it("forwards the effective trusted-proxy origin to private Vite HMR", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "overmux-proxy-hmr-"));
+    const directory = await createDirectory("overmux-proxy-hmr-");
     const configPath = join(directory, "overmux.config.ts");
     const port = await findAvailablePort();
     const proxyOrigin = "https://machine.example.com";
@@ -547,7 +553,7 @@ export default defineOvermuxConfig({
   });
 
   it("enforces browser socket policy, fails closed, and revokes active sockets", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "overmux-socket-open-"));
+    const directory = await createDirectory("overmux-socket-open-");
     const configPath = join(directory, "overmux.config.ts");
     const port = await findAvailablePort();
     const unavailableVitePort = await findAvailablePort();

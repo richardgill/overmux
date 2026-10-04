@@ -1,14 +1,13 @@
 // Owns named stream registration and ordered, validated session messaging.
 // Session abort, failure, and disposal remain exactly-once across every close path.
 
-import type { StreamHandlerDefinition } from "../../../public/index";
+import type {
+  StreamContext,
+  StreamHandlerDefinition,
+} from "../../../public/index";
 import { z } from "zod";
 
 import type { RuntimeLifecycle } from "./runtime-lifecycle";
-import type {
-  RuntimeHandlerContext,
-  RuntimeResources,
-} from "./runtime-resources";
 import type { ServerLogger } from "../server-logger";
 import {
   createHandlerLogger,
@@ -38,21 +37,20 @@ export type RuntimeStreams = {
 type AnyStream = StreamHandlerDefinition<
   z.ZodTypeAny,
   z.ZodTypeAny,
-  z.ZodTypeAny,
-  RuntimeHandlerContext
+  z.ZodTypeAny
 >;
 
 export type RuntimeStreamDefinitions = Readonly<Record<string, AnyStream>>;
 
 type CreateRuntimeStreamsOptions = {
-  context: RuntimeResources["context"];
+  instance: StreamContext["instance"];
   serverLogger?: ServerLogger;
   definitions: RuntimeStreamDefinitions;
   lifecycle: RuntimeLifecycle;
 };
 
 export const createRuntimeStreams = ({
-  context,
+  instance,
   definitions,
   lifecycle,
   serverLogger,
@@ -88,7 +86,7 @@ export const createRuntimeStreams = ({
           }
         };
         const session = await definition.open(input, {
-          ...context(sessionSignal),
+          instance,
           logger: createHandlerLogger({
             serverLogger,
             correlation,

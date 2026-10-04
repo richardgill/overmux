@@ -30,12 +30,10 @@ type Subscribe = SubscriptionResourceDefinition<
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (cause: unknown) => void;
-  const promise = new Promise<T>((onResolve, onReject) => {
+  const promise = new Promise<T>((onResolve) => {
     resolve = onResolve;
-    reject = onReject;
   });
-  return { promise, reject, resolve };
+  return { promise, resolve };
 };
 
 const prepareResources = (definitions: RuntimeResourceDefinitions) => {
@@ -191,6 +189,37 @@ describe("runtime resources", () => {
     },
   );
 
+  it("parses subscription input once and uses that key for invalidation", async () => {
+    const parseInput = vi.fn((value: string) => Number(value));
+    const subscribe = vi.fn(() => vi.fn());
+    const { resources, lifecycle } = prepareResources({
+      source: {
+        contract: {
+          input: z.string().transform(parseInput),
+          output: z.number(),
+        },
+        kind: "subscription",
+        read: (value) => value,
+        subscribe,
+      },
+    });
+    const listener = vi.fn();
+    const dispose = await resources.get("source")!.subscribe("01", listener);
+    listener.mockClear();
+
+    resources.invalidate("source", "1");
+
+    expect(subscribe).toHaveBeenCalledWith(
+      1,
+      expect.any(Function),
+      expect.any(Object),
+    );
+    expect(parseInput.mock.calls.map(([value]) => value)).toEqual(["01", "1"]);
+    expect(listener).toHaveBeenCalledOnce();
+    await dispose();
+    await lifecycle.dispose();
+  });
+
   it("handles synchronous invalidation that cancels before setup returns cleanup", async () => {
     const controller = new AbortController();
     const cleanup = vi.fn();
@@ -265,6 +294,181 @@ describe("runtime resources", () => {
     await lifecycle.dispose();
     expect(cleanup).toHaveBeenCalledOnce();
   });
+
+  it("parses each reachable contract once from raw input and reads shared dependencies once", async () => {
+    const parseSource = vi.fn(Number);
+    const parseBranch = vi.fn((key: string) => ({ key }));
+    const parseRoot = vi.fn((key: string) => `root:${key}`);
+    const read = vi.fn((value: number) => value);
+    const subscribe = vi.fn(() => vi.fn());
+    const { resources, lifecycle } = prepareResources({
+      source: {
+        kind: "subscription",
+        contract: {
+          input: z.string().transform(parseSource),
+          output: z.number().transform((count) => ({ count })),
+        },
+        read,
+        subscribe,
+      },
+      branch: {
+        kind: "derived",
+        contract: {
+          input: z.string().transform(parseBranch),
+          output: z.number(),
+        },
+        dependencies: { source: "source" },
+        combine: ({ source }) => source.count,
+      },
+      derived: {
+        kind: "derived",
+        contract: {
+          input: z.string().transform(parseRoot),
+          output: z.number(),
+        },
+        dependencies: { source: "source", branch: "branch" },
+        combine: ({ source, branch }) => source.count + branch,
+      },
+    });
+    const derived = resources.get("derived")!;
+    await expect(derived.read("01")).resolves.toBe(2);
+    expect(read).toHaveBeenCalledOnce();
+    for (const parse of [parseSource, parseBranch, parseRoot]) {
+      expect(parse.mock.calls.map(([value]) => value)).toEqual(["01"]);
+      parse.mockClear();
+    }
+
+    const listener = vi.fn();
+    await derived.subscribe("01", listener);
+    expect(subscribe).toHaveBeenCalledWith(
+      1,
+      expect.any(Function),
+      expect.any(Object),
+    );
+    listener.mockClear();
+    resources.invalidate("source", "1");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(parseSource.mock.calls.map(([value]) => value)).toEqual(["01", "1"]);
+    for (const parse of [parseBranch, parseRoot]) {
+      expect(parse.mock.calls.map(([value]) => value)).toEqual(["01"]);
+    }
+    await lifecycle.dispose();
+  });
+
+  testCases.each(["unsubscribe", "shutdown"] as const)(
+    "releases acquired derived dependencies on %s, then releases late setup once",
+    async (ending) => {
+      const setup = deferred<RuntimeDisposer>();
+      const reachedSecond = deferred<void>();
+      const cleanupFirst = vi.fn();
+      const cleanupLate = vi.fn();
+      const third = vi.fn<Subscribe>(() => vi.fn<RuntimeDisposer>());
+      const { resources, lifecycle } = prepareResources({
+        first: sourceDefinition(() => cleanupFirst),
+        second: sourceDefinition(() => {
+          reachedSecond.resolve();
+          return setup.promise;
+        }),
+        third: sourceDefinition(third),
+        derived: {
+          kind: "derived",
+          contract: countContract,
+          dependencies: { first: "first", second: "second", third: "third" },
+          combine: ({ first }) => first,
+        },
+      });
+      const controller = new AbortController();
+      const listener = vi.fn();
+      const pending = resources
+        .get("derived")!
+        .subscribe({ value: 1 }, listener, controller.signal);
+      await reachedSecond.promise;
+
+      if (ending === "shutdown") {
+        await lifecycle.dispose();
+      } else {
+        controller.abort();
+      }
+      await vi.waitFor(() => expect(cleanupFirst).toHaveBeenCalledOnce());
+      setup.resolve(cleanupLate);
+      await expect(pending).rejects.toThrow();
+      resources.invalidate("first");
+      expect(listener).not.toHaveBeenCalled();
+      expect(third).not.toHaveBeenCalled();
+      expect(cleanupLate).toHaveBeenCalledOnce();
+      await lifecycle.dispose();
+      expect(cleanupFirst).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not parse or activate pre-aborted derived requests, or combine after read cancellation", async () => {
+    const parse = vi.fn((value) => value);
+    const setup = vi.fn<Subscribe>(() => vi.fn<RuntimeDisposer>());
+    const output = deferred<{ count: number }>();
+    const read = vi.fn(() => output.promise);
+    const combine = vi.fn(({ source }) => source);
+    const { resources, lifecycle } = prepareResources({
+      source: { ...sourceDefinition(setup), read },
+      derived: {
+        kind: "derived",
+        contract: { ...countContract, input: input.transform(parse) },
+        dependencies: { source: "source" },
+        combine,
+      },
+    });
+    const derived = resources.get("derived")!;
+    const reason = new Error("request cancelled");
+    const signal = AbortSignal.abort(reason);
+    await expect(derived.read({ value: 1 }, signal)).rejects.toBe(reason);
+    await expect(derived.subscribe({ value: 1 }, vi.fn(), signal)).rejects.toBe(
+      reason,
+    );
+    expect(parse).not.toHaveBeenCalled();
+    expect(setup).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+
+    const controller = new AbortController();
+    const pending = derived.read({ value: 1 }, controller.signal);
+    controller.abort(reason);
+    output.resolve({ count: 1 });
+    await expect(pending).rejects.toBe(reason);
+    expect(combine).not.toHaveBeenCalled();
+    await lifecycle.dispose();
+  });
+
+  testCases.each(["invalidation", "refresh"] as const)(
+    "cancels a derived subscription during synchronous %s",
+    async (event) => {
+      const controller = new AbortController();
+      const reason = new Error("cancelled during " + event);
+      const cleanup = vi.fn();
+      const { resources, lifecycle } = prepareResources({
+        source: sourceDefinition((_input, invalidate) => {
+          if (event === "invalidation") {
+            invalidate();
+          }
+          return cleanup;
+        }),
+        derived: {
+          kind: "derived",
+          contract: countContract,
+          dependencies: { source: "source" },
+          combine: ({ source }) => source,
+        },
+      });
+      await expect(
+        resources
+          .get("derived")!
+          .subscribe(
+            { value: 1 },
+            () => controller.abort(reason),
+            controller.signal,
+          ),
+      ).rejects.toBe(reason);
+      expect(cleanup).toHaveBeenCalledOnce();
+      await lifecycle.dispose();
+    },
+  );
 
   it("rolls back earlier dependencies and reports setup and cleanup failures", async () => {
     const setupFailure = new Error("setup failed");

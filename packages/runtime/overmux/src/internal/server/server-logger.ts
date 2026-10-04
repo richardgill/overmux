@@ -51,6 +51,17 @@ const safeJson = (value: unknown) => {
   }
 };
 
+export const isServerLogEnabled = (logLevel: LogLevel, entry: ServerLogEntry) =>
+  severity[entry.level ?? "info"] >= severity[logLevel];
+
+export const serializeServerLogEntry = (entry: ServerLogEntry) =>
+  safeJson({
+    ...entry,
+    timestamp: entry.timestamp ?? new Date().toISOString(),
+    level: entry.level ?? "info",
+    source: entry.source ?? "server",
+  });
+
 export const createServerLogger = ({
   logLevel,
   logFile,
@@ -62,16 +73,10 @@ export const createServerLogger = ({
     logLevel,
     id: randomUUID,
     log: (entry) => {
-      const level = entry.level ?? "info";
-      if (severity[level] < severity[logLevel]) {
+      if (!isServerLogEnabled(logLevel, entry)) {
         return;
       }
-      const record = safeJson({
-        ...entry,
-        timestamp: entry.timestamp ?? new Date().toISOString(),
-        level,
-        source: entry.source ?? "server",
-      });
+      const record = serializeServerLogEntry(entry);
       mkdirSync(dirname(logFile), { recursive: true });
       appendFileSync(logFile, `${record}\n`, "utf8");
       process.stderr.write(`[overmux] ${record}\n`);

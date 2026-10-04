@@ -11,6 +11,7 @@ export {
 export type {
   ResolvedOvermuxConfigPaths,
   RuntimeConfigDefinition,
+  RuntimeConfigSettings,
 } from "./config";
 export { getOvermuxPaths } from "./paths";
 export type { GetOvermuxPathsOptions, OvermuxPaths } from "./paths";

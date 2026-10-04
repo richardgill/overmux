@@ -18,7 +18,7 @@ import {
 export class OperationValidationError extends Error {
   constructor(
     readonly phase: "input" | "output",
-    cause: z.ZodError,
+    cause: Error,
   ) {
     super(cause.message, { cause });
   }

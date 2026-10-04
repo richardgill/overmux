@@ -229,6 +229,21 @@ describe("tmux control backend", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  it("does not refresh state for stream-only listeners and reuses its client", async () => {
+    vi.useFakeTimers();
+    const { backend, command, emitNotification, controlClientFactory } =
+      createBackendFixture();
+    const unsubscribe = backend.subscribeNotifications(() => undefined);
+
+    emitNotification({ type: "sessions-changed" });
+    await vi.advanceTimersByTimeAsync(4);
+    expect(command).not.toHaveBeenCalled();
+
+    unsubscribe();
+    await backend.refresh();
+    expect(controlClientFactory).toHaveBeenCalledOnce();
+  });
+
   it("uses slow reconciliation to recover a missed notification", async () => {
     vi.useFakeTimers();
     const { backend, setSessionName } = createBackendFixture();
