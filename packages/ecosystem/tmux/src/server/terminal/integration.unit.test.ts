@@ -3,6 +3,11 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
+import {
+  spawnPty,
+  type PtyFactory,
+  type PtyProcess,
+} from "@overmux/pty/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { tmuxSocketArguments, type TmuxBackend } from "../backend";
@@ -122,7 +127,10 @@ const waitForSessionChange = async ({
 const connectTerminal = async (
   backend: TmuxBackend,
   sessionId: string,
-  geometry = true,
+  {
+    geometry = true,
+    ptyFactory,
+  }: { geometry?: boolean; ptyFactory?: PtyFactory } = {},
 ) => {
   const controller = new AbortController();
   const messages: TmuxTerminalServerMessage[] = [];
@@ -139,6 +147,7 @@ const connectTerminal = async (
     fail: failure,
     geometryPolicy: "shared",
     outputChunkSize: defaultTmuxTerminalOutputChunkSize,
+    ptyFactory,
     signal: controller.signal,
   });
   const client = createTmuxTerminalClient({
@@ -275,37 +284,115 @@ const cleanupIsolatedTmux = async () => {
 afterEach(cleanupIsolatedTmux);
 
 describe("real isolated tmux terminal", () => {
-  it("exposes the native client as soon as the readiness handshake signals", async () => {
-    const backend = createIsolatedTmuxBackend();
-    const sessionId = await createTmuxSession(backend, "handshake");
-    let clientAtSignal:
-      | Awaited<ReturnType<typeof readNativeTerminalClient>>
-      | undefined;
-    const terminal = await connectTerminal(
-      {
-        ...backend,
-        run: async (args, signal) => {
-          const output = await backend.run(args, signal);
-          if (args[0] === "wait-for") {
-            // Inspect immediately after the native signal, before the attachment code resumes.
-            const storedName = (
-              await backend.run(["show-options", "-gv", `@${args[1]}`])
-            ).trim();
-            clientAtSignal = await readNativeTerminalClient(backend);
-            expect(clientAtSignal.name).toBe(storedName);
-            expect(clientAtSignal.sessionId).toBe(sessionId);
-          }
-          return output;
-        },
+  it("identifies the native node-pty client by its spawned PID", async () => {
+    const isolated = createIsolatedTmuxBackend();
+    const sessionId = await createTmuxSession(isolated, "pid-discovery");
+    const backend = withControlTransport(isolated);
+    const ptyFactory = vi.fn(spawnPty);
+    const terminal = await connectTerminal(backend, sessionId, {
+      geometry: false,
+      ptyFactory,
+    });
+
+    const nativeClient = await readNativeTerminalClient(backend);
+    expect(nativeClient.pid).toBe(
+      String(ptyFactory.mock.results[0]?.value.pid),
+    );
+    expect(nativeClient.sessionId).toBe(sessionId);
+    expect(ptyFactory.mock.calls[0]?.[0].args).toEqual([
+      ...tmuxSocketArguments(backend.socket),
+      "attach-session",
+      "-E",
+      "-f",
+      "ignore-size",
+      "-t",
+      `=${sessionId}`,
+    ]);
+    expect(terminal.failure).not.toHaveBeenCalled();
+    await terminal.disconnect();
+  });
+
+  it("cancels before readiness then attaches again on the same persistent backend", async () => {
+    const isolated = createIsolatedTmuxBackend();
+    const sessionId = await createTmuxSession(isolated, "cancel-reattach");
+    const control = withControlTransport(isolated);
+    let hideClient = true;
+    const run = vi.fn(async (args: readonly string[], signal?: AbortSignal) => {
+      const output = await control.run(args, signal);
+      // Keep discovery pending after a real query, without introducing any native waiter.
+      return hideClient && args[2] === "#{client_pid}|#{client_name}"
+        ? ""
+        : output;
+    });
+    const backend = { ...control, run };
+    const controller = new AbortController();
+    const messages: TmuxTerminalServerMessage[] = [];
+    const failure = vi.fn();
+    let pty: PtyProcess | undefined;
+    let exited = false;
+    const cancelled = createTmuxTerminalSession({
+      allowInput: true,
+      backend,
+      emit: (message) => messages.push(message),
+      fail: failure,
+      geometryPolicy: "shared",
+      outputChunkSize: defaultTmuxTerminalOutputChunkSize,
+      ptyFactory: (options) => {
+        pty = spawnPty(options);
+        pty.onExit(() => {
+          exited = true;
+        });
+        return pty;
       },
-      sessionId,
-      false,
+      signal: controller.signal,
+    });
+    const dispose = async () => {
+      controller.abort();
+      await cancelled.dispose?.();
+      activeTerminalDisposals.delete(dispose);
+    };
+    activeTerminalDisposals.add(dispose);
+    cancelled.onMessage?.({
+      requestId: 0,
+      target: { sessionId },
+      type: "go-to",
+    });
+    await vi.waitFor(
+      () =>
+        expect(
+          run.mock.calls.some(
+            ([args]) => args[2] === "#{client_pid}|#{client_name}",
+          ),
+        ).toBe(true),
+      { timeout: realProcessTimeout },
     );
 
-    expect(clientAtSignal).toBeDefined();
-    expect((await readNativeTerminalClient(backend)).pid).toBe(
-      clientAtSignal?.pid,
+    await dispose();
+    expect(pty).toBeDefined();
+    expect(exited).toBe(true);
+    expect(
+      messages.some(
+        (message) =>
+          message.type === "go-to-result" ||
+          message.type === "location-changed",
+      ),
+    ).toBe(false);
+    expect(failure).not.toHaveBeenCalled();
+    hideClient = false;
+
+    await expect(
+      backend.run(
+        ["show-options", "-gv", "status"],
+        AbortSignal.timeout(realProcessTimeout),
+      ),
+    ).resolves.toBe("on\n");
+    const terminal = await connectTerminal(backend, sessionId);
+    terminal.client.input("printf 'AFTERCANCEL7\\n'\r");
+    await waitForPaneOutput(backend, sessionId, "AFTERCANCEL7");
+    expect(await backend.run(["show-options", "-g"])).not.toContain(
+      "@overmux-ready-",
     );
+    expect(run.mock.calls.flat(2)).not.toContain("wait-for");
     expect(terminal.failure).not.toHaveBeenCalled();
     await terminal.disconnect();
   });
@@ -564,7 +651,9 @@ describe("real isolated tmux terminal", () => {
     );
     const before = await dimensions();
 
-    const pendingRenderer = await connectTerminal(backend, sessionId, false);
+    const pendingRenderer = await connectTerminal(backend, sessionId, {
+      geometry: false,
+    });
     expect(await dimensions()).toBe(before);
     expect(
       await backend.run(["list-clients", "-F", "#{client_flags}"]),

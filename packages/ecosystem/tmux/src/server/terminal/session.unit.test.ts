@@ -94,6 +94,7 @@ const createSessionHarness = ({
     | ((event: { type: "sessions-changed" }) => void)
     | undefined;
   let attachReadiness: Promise<void> | undefined;
+  let discoveryOutput: string | undefined;
   let attachedSessionId = "$1";
   const clientName = "/dev/pts/terminal";
 
@@ -102,12 +103,14 @@ const createSessionHarness = ({
       const sessionId = args[3]?.replace(/^=/, "").replace(/:$/, "") ?? "";
       return `${await (sessionLookups.get(sessionId) ?? sessionId)}\n`;
     }
-    if (args[0] === "wait-for") {
+    if (
+      args[0] === "list-clients" &&
+      args[2] === "#{client_pid}|#{client_name}"
+    ) {
       await attachReadiness;
-      return "";
-    }
-    if (args[0] === "show-options") {
-      return `${clientName}\n`;
+      return (
+        discoveryOutput ?? `9123|/dev/pts/other\n${process.pid}|${clientName}\n`
+      );
     }
     if (args[0] === "list-clients") {
       const location = locationFor(attachedSessionId);
@@ -157,6 +160,9 @@ const createSessionHarness = ({
   return {
     abort: () => abortController.abort(),
     fail,
+    setDiscoveryOutput: (value: string | undefined) => {
+      discoveryOutput = value;
+    },
     holdAttachReadiness: () => {
       const readiness = createDeferred<void>();
       attachReadiness = readiness.promise;
@@ -394,6 +400,34 @@ describe("tmux terminal navigation", () => {
     );
 
     expect(terminal.unsubscribeNotifications).toHaveBeenCalledOnce();
+    expect(terminal.run.mock.calls.map(([args]) => args[0])).toEqual([
+      "display-message",
+    ]);
+    await terminal.session.dispose?.();
+  });
+
+  it("terminates a failed initial attachment even after its navigation is superseded", async () => {
+    const terminal = createSessionHarness();
+    const readiness = terminal.holdAttachReadiness();
+    const discoveryFailure = new Error("Client discovery failed");
+    terminal.select("$1");
+    await vi.waitFor(() =>
+      expect(
+        terminal.run.mock.calls.some(
+          ([args]) => args[2] === "#{client_pid}|#{client_name}",
+        ),
+      ).toBe(true),
+    );
+
+    terminal.select("$2");
+    readiness.reject(discoveryFailure);
+    await vi.waitFor(() =>
+      expect(terminal.fail).toHaveBeenCalledWith(discoveryFailure),
+    );
+
+    expect(terminal.process.kill).toHaveBeenCalledOnce();
+    expect(hasSessionSwitch(terminal, "$2")).toBe(false);
+    expect(terminal.unsubscribeNotifications).toHaveBeenCalledOnce();
     await terminal.session.dispose?.();
   });
 
@@ -546,6 +580,103 @@ describe("tmux terminal output boundary", () => {
 });
 
 describe("tmux terminal cleanup", () => {
+  it("retries missing PID discovery without selecting a different native client", async () => {
+    const terminal = createSessionHarness();
+    terminal.setDiscoveryOutput("9123|/dev/pts/other\n");
+    terminal.select("$1");
+    await vi.waitFor(() =>
+      expect(
+        terminal.run.mock.calls.filter(
+          ([args]) => args[2] === "#{client_pid}|#{client_name}",
+        ).length,
+      ).toBeGreaterThanOrEqual(2),
+    );
+    expect(terminal.messages).toEqual([]);
+    expect(hasSessionSwitch(terminal, "$1")).toBe(false);
+
+    terminal.setDiscoveryOutput(undefined);
+    await vi.waitFor(() => expect(hasSessionSwitch(terminal, "$1")).toBe(true));
+    expect(terminal.run.mock.calls.flat(2)).not.toContain("wait-for");
+    expect(terminal.run.mock.calls.flat(2)).not.toContain("show-options");
+    await terminal.session.dispose?.();
+  });
+
+  it("bounds discovery and terminates the PTY when its PID never appears", async () => {
+    const terminal = createSessionHarness();
+    terminal.setDiscoveryOutput("9123|/dev/pts/other\n");
+    terminal.select("$1");
+
+    await vi.waitFor(() => expect(terminal.fail).toHaveBeenCalledOnce(), {
+      timeout: 12_000,
+    });
+
+    expect(terminal.fail.mock.calls[0]?.[0].name).toMatch(
+      /^(AbortError|TimeoutError)$/,
+    );
+    expect(terminal.process.kill).toHaveBeenCalledWith("SIGHUP");
+    expect(hasSessionSwitch(terminal, "$1")).toBe(false);
+    await terminal.session.dispose?.();
+  });
+
+  it("cancels discovery during a retry delay and terminates the unidentified PTY", async () => {
+    const terminal = createSessionHarness();
+    terminal.setDiscoveryOutput("");
+    terminal.select("$1");
+    await vi.waitFor(() =>
+      expect(
+        terminal.run.mock.calls.filter(
+          ([args]) => args[2] === "#{client_pid}|#{client_name}",
+        ).length,
+      ).toBeGreaterThanOrEqual(1),
+    );
+
+    terminal.abort();
+    await terminal.session.dispose?.();
+
+    expect(terminal.process.kill).toHaveBeenCalledWith("SIGHUP");
+    expect(terminal.process.exitSubscriptionDisposed).toHaveBeenCalledOnce();
+    expect(terminal.messages).toEqual([]);
+    expect(terminal.fail).not.toHaveBeenCalled();
+  });
+
+  testCases.each(["disposal", "early exit"] as const)(
+    "does not install a late discovery response after %s",
+    async (ending) => {
+      const terminal = createSessionHarness();
+      const readiness = terminal.holdAttachReadiness();
+      terminal.select("$1");
+      await vi.waitFor(() =>
+        expect(
+          terminal.run.mock.calls.some(
+            ([args]) => args[2] === "#{client_pid}|#{client_name}",
+          ),
+        ).toBe(true),
+      );
+
+      if (ending === "early exit") {
+        terminal.process.exit({ exitCode: 7 });
+      } else {
+        terminal.abort();
+      }
+      const disposal = terminal.session.dispose?.();
+      // Deliberately return a backend response after cancellation to exercise the identity guard.
+      readiness.resolve();
+      await disposal;
+
+      expect(terminal.messages).toEqual([]);
+      expect(hasSessionSwitch(terminal, "$1")).toBe(false);
+      expect(terminal.process.exitSubscriptionDisposed).toHaveBeenCalledOnce();
+      if (ending === "early exit") {
+        expect(terminal.fail).toHaveBeenCalledWith(
+          new Error("Tmux terminal client exited (code 7, signal none)"),
+        );
+      } else {
+        expect(terminal.fail).not.toHaveBeenCalled();
+        expect(terminal.process.kill).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
   it("disposes the PTY and subscriptions only once", async () => {
     const terminal = createSessionHarness();
     await attachTerminal(terminal);
@@ -610,14 +741,19 @@ describe("tmux PTY command policy", () => {
     ({ expected, policy }) => {
       const args = tmuxAttachArguments({
         geometryPolicy: policy,
-        readyChannel: "ready",
         sessionId: "$1",
         socket: "/tmp/tmux.sock",
       });
 
-      expect(args).toEqual(
-        expect.arrayContaining(["-S", "/tmp/tmux.sock", "-t", "=$1", "ready"]),
-      );
+      expect(args).toEqual([
+        "-S",
+        "/tmp/tmux.sock",
+        "attach-session",
+        "-E",
+        ...expected,
+        "-t",
+        "=$1",
+      ]);
       expect(
         args.filter((argument) => ["-f", "ignore-size"].includes(argument)),
       ).toEqual(expected);
