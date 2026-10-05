@@ -13,10 +13,11 @@
 //   location-changed         reports the full session/window/pane location observed by this client.
 //   go-to-result             correlates a request with its confirmed location or rejection.
 //
-// tmuxAttachArguments(...) uses wait-for to discover tmux's native client name, which switch-client needs.
+// After plain attach-session, list-clients matches the PTY PID to the native name switch-client needs.
 // resize updates the PTY; ignore-size excludes this viewer from tmux's shared size calculation.
 // dispose/failure cancels work, removes notification listeners, and terminates the PTY, not the tmux session.
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { HandlerLogger, StreamSession } from "overmux";
 import {
@@ -77,19 +78,15 @@ type TmuxTerminalSessionOptions = {
 export const defaultTmuxTerminalOutputChunkSize = 32 * 1_024;
 
 // Builds arguments for the tmux process hosted by the browser's PTY; it does not run tmux itself.
-// For example, socket=/tmp/tmux.sock, sessionId=$3, and readyChannel=overmux-ready-123 produce:
-//   tmux -S /tmp/tmux.sock attach-session -E -f ignore-size -t '=$3' \
-//     \; set-option -Fgq @overmux-ready-123 '#{client_name}' \
-//     \; wait-for -S overmux-ready-123
-// The result is a visible client attached to $3 and a handshake that reports its tmux client name.
+// For example, socket=/tmp/tmux.sock and sessionId=$3 produce:
+//   tmux -S /tmp/tmux.sock attach-session -E -f ignore-size -t '=$3'
+// The result is a visible client attached to $3, with no commands blocking the native queue.
 export const tmuxAttachArguments = ({
   geometryPolicy,
-  readyChannel,
   sessionId,
   socket,
 }: {
   geometryPolicy: TmuxGeometryPolicy;
-  readyChannel: string;
   sessionId: string;
   socket: string;
 }) => [
@@ -103,20 +100,6 @@ export const tmuxAttachArguments = ({
   "-t",
   // For example, =$3 targets session ID $3 exactly rather than using tmux's fuzzy target matching.
   `=${sessionId}`,
-  // Start the next command in the same tmux command queue, now scoped to the attached client.
-  ";",
-  // For example, this stores /dev/pts/8 in @overmux-ready-123. -F expands the format,
-  // -g makes the temporary option readable by another client, and -q suppresses option errors.
-  "set-option",
-  "-Fgq",
-  `@${readyChannel}`,
-  tmuxFormats.clientName,
-  ";",
-  // Equivalent to `tmux wait-for -S overmux-ready-123`: wake the backend waiter only after
-  // the option contains this PTY's client name. The backend then reads and removes the option.
-  "wait-for",
-  "-S",
-  readyChannel,
 ];
 
 const terminalEnvironment = () => ({
@@ -124,10 +107,43 @@ const terminalEnvironment = () => ({
   TERM: "xterm-256color",
   TERM_PROGRAM: "overmux",
 });
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+// Discovery lasts at most ten seconds, including queries and retry delays. Cancellation
+// stops both immediately; plain list-clients cannot strand tmux's native command queue.
+const discoverTerminalClient = async ({
+  backend,
+  pid,
+  signal,
+}: {
+  backend: TmuxBackend;
+  pid: number;
+  signal: AbortSignal;
+}) => {
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+  const prefix = `${pid}|`;
+  for (;;) {
+    deadline.throwIfAborted();
+    const clients = await backend.run(
+      [
+        "list-clients",
+        "-F",
+        `${tmuxFormats.clientPid}|${tmuxFormats.clientName}`,
+      ],
+      deadline,
+    );
+    // Even a backend which returns a late response must not install a cancelled identity.
+    deadline.throwIfAborted();
+    const clientName = clients
+      .split("\n")
+      .find((line) => line.startsWith(prefix))
+      ?.slice(prefix.length);
+    if (clientName) {
+      return clientName;
+    }
+    await delay(50, undefined, { signal: deadline });
+  }
+};
 
-// Every tmux command has a deadline, including the attachment handshake. A wedged tmux
+// Every tmux command has a deadline, including attachment discovery. A wedged tmux
 // server must not leave a navigation promise or shutdown waiting forever.
 const boundedBackend = (backend: TmuxBackend): TmuxBackend => ({
   ...backend,
@@ -164,8 +180,7 @@ export const createTmuxTerminalSession = (
   ]);
   // Output acknowledgements include this ID so an old PTY cannot acknowledge a replacement's data.
   const terminalId = randomUUID();
-  const attachment: { readyChannel?: string; ptyPid?: number; ready: boolean } =
-    { ready: false };
+  const attachment: { ptyPid?: number; ready: boolean } = { ready: false };
   const logAttachment = (
     event: string,
     level: "debug" | "warn" = "debug",
@@ -272,24 +287,13 @@ export const createTmuxTerminalSession = (
   });
 
   // Starts `tmux attach-session` in a PTY of the requested size and returns tmux's native
-  // client name, such as /dev/pts/8. A unique wait-for channel coordinates this handshake:
-  // tmux stores #{client_name}, signals the waiter, and the backend reads and removes the option.
+  // client name, such as /dev/pts/8, by matching #{client_pid} to the spawned PTY PID.
   // PTY data is forwarded to the browser; an unexpected PTY exit fails the stream.
   const spawnTmuxTerminal = async (
     sessionId: string,
     geometry: TerminalSize,
   ) => {
-    const readyChannel = `overmux-ready-${randomUUID()}`;
-    attachment.readyChannel = readyChannel;
     logAttachment("started");
-    // The tmux client signals after attach so its native client name can be read safely.
-    const attached = backend
-      .run(["wait-for", readyChannel], lifecycleSignal)
-      .then((response) => {
-        // Control mode's %end for wait-for is not proof that its native queue was signalled.
-        logAttachment("wait-for-response");
-        return response;
-      });
     let spawned: PtyProcess;
     try {
       logAttachment("pty-launch");
@@ -300,7 +304,6 @@ export const createTmuxTerminalSession = (
           // already visible in other clients. Ignore this client's size until the renderer
           // reports real dimensions; shared geometry is enabled when that resize is applied.
           geometryPolicy: "ignore-size",
-          readyChannel,
           sessionId,
           socket: options.backend.socket,
         }),
@@ -312,7 +315,6 @@ export const createTmuxTerminalSession = (
     } catch (cause) {
       logAttachment("pty-launch-failed", "warn", tmuxErrorContext(cause));
       lifecycleController.abort(cause);
-      await attached.catch(() => undefined);
       throw cause;
     }
     terminal.process = spawned;
@@ -339,20 +341,17 @@ export const createTmuxTerminalSession = (
         }
       });
     });
-    await attached;
-    const readyOption = `@${readyChannel}`;
-    let clientName: string;
     try {
-      clientName = (
-        await backend.run(["show-options", "-gv", readyOption], lifecycleSignal)
-      ).trim();
-    } finally {
-      await backend.run(["set-option", "-gu", readyOption], lifecycleSignal);
+      return await discoverTerminalClient({
+        backend,
+        pid: spawned.pid,
+        signal: lifecycleSignal,
+      });
+    } catch (cause) {
+      // Failed discovery cannot leave an unidentified PTY alive or available for reuse.
+      lifecycleController.abort(cause);
+      throw cause;
     }
-    if (!clientName) {
-      throw new Error("Tmux terminal client did not identify itself");
-    }
-    return clientName;
   };
 
   // Reports the full location currently displayed by this browser's tmux client.
@@ -492,8 +491,7 @@ export const createTmuxTerminalSession = (
       return false;
     }
     // A stale initial attach is retained; the serialized selection task switches it next.
-    // wait-for runs after attach-session in the same native command queue. Its signal and
-    // stored client name establish readiness; the final location query confirms selection.
+    // list-clients establishes that this PID is attached; the final location query confirms selection.
     terminal.clientName = attachedClientName;
     attachment.ready = true;
     logAttachment("ready");
@@ -578,6 +576,10 @@ export const createTmuxTerminalSession = (
       }
     } catch (cause) {
       if (!isCurrent() || lifecycle.disposed) {
+        // Attachment failure is fatal even if a newer navigation superseded its request.
+        if (lifecycleSignal.aborted) {
+          fail(cause);
+        }
         return;
       }
       logAttachment("selection-failed", "warn", tmuxErrorContext(cause));
