@@ -1,5 +1,11 @@
 # @overmux/xterm
 
+## 0.0.13
+
+### Patch Changes
+
+- [#48](https://github.com/richardgill/overmux/pull/48) [`1a43f1f`](https://github.com/richardgill/overmux/commit/1a43f1fa4d1925c84713963216af270b70de9639) Thanks [@richardgill](https://github.com/richardgill)! - Accept tmux copy-mode OSC 52 messages with an empty selection as default clipboard writes, while keeping clipboard reads and primary-selection access restricted.
+
 ## 0.0.12
 
 ### Patch Changes
