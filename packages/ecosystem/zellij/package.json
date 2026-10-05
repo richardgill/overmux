@@ -1,6 +1,6 @@
 {
   "name": "@overmux/zellij",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "license": "MIT",
   "description": "Reusable Zellij state, operations, and terminal streaming for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/zellij",

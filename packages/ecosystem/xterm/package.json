@@ -1,6 +1,6 @@
 {
   "name": "@overmux/xterm",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "license": "MIT",
   "description": "Reusable xterm browser rendering for Overmux",
   "homepage": "https://github.com/richardgill/overmux/tree/main/packages/ecosystem/xterm",

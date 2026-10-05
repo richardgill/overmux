@@ -1,5 +1,14 @@
 # @overmux/tmux
 
+## 0.0.14
+
+### Patch Changes
+
+- [#47](https://github.com/richardgill/overmux/pull/47) [`e4770c3`](https://github.com/richardgill/overmux/commit/e4770c38b026872a5685a03227162271361e9f0d) Thanks [@richardgill](https://github.com/richardgill)! - Discover terminal clients by their spawned PTY PID instead of a readiness handshake, preventing cancelled attachments from stranding the shared tmux command queue and stalling later navigation.
+
+- Updated dependencies [[`1a43f1f`](https://github.com/richardgill/overmux/commit/1a43f1fa4d1925c84713963216af270b70de9639)]:
+  - @overmux/xterm@0.0.13
+
 ## 0.0.13
 
 ### Patch Changes
