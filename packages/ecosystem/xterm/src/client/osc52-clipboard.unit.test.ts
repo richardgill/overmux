@@ -93,25 +93,28 @@ testCases.each([
     write: true,
   },
 ])(
-  "$name uses runtime defaults without options",
+  "$name handles tmux empty-selection writes without enabling clipboard reads",
   async ({ factory, read, write }) => {
     const { terminal, input } = openTerminal(factory());
 
     await sendOsc52(terminal, "c", "?");
     await sendOsc52(terminal, "c", btoa("copy"));
+    await sendOsc52(terminal, "", "?");
+    await sendOsc52(terminal, "", btoa("tmux copy"));
 
     expect(readClipboardText).toHaveBeenCalledTimes(Number(read));
     expect(vi.mocked(writeClipboardText).mock.calls).toEqual(
-      write ? [["copy"]] : [],
+      write ? [["copy"], ["tmux copy"]] : [],
     );
     expect(input).toHaveBeenCalledWith(
       `\x1b]52;c;${read ? btoa("browser text") : ""}\x07`,
     );
+    expect(input).toHaveBeenLastCalledWith("\x1b]52;;\x07");
   },
 );
 
 testCases.each(["c", "p"] as const)(
-  "handles only the exact configured selection %s",
+  "restricts reads and unsupported writes to the configured selection %s",
   async (selection) => {
     const readText = vi.fn(async () => "selected");
     const writeText = vi.fn(async () => {});
@@ -128,7 +131,9 @@ testCases.each(["c", "p"] as const)(
     }
 
     expect(readText).toHaveBeenCalledOnce();
-    expect(writeText).toHaveBeenCalledExactlyOnceWith("copy");
+    expect(writeText.mock.calls).toEqual(
+      selection === "c" ? [["copy"], ["copy"]] : [["copy"]],
+    );
   },
 );
 

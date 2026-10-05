@@ -85,7 +85,8 @@ const createSelectedClipboardAddon = ({
     readText: (requested) =>
       requested === selection && readText ? readText() : "",
     writeText: (requested, text) => {
-      if (requested === selection) {
+      // tmux copy-mode emits an empty selection; accept it as a default clipboard write.
+      if (requested === selection || (requested === "" && selection === "c")) {
         return writeText?.(text);
       }
     },
